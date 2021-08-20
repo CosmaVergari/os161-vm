@@ -20,8 +20,12 @@ programma fa accesso -> va alla tlb -> tlb miss -> leggo la page table (array in
 
 - Per trovare una pagina libera si tiene una free list con inserimento in testa quando si libera una pagina, ed estrazione in testa quando si vuole occupare una pagina. (non usiamo solo una variabile perchè bisogna tenere traccia delle pagine libere)
 
-- Usiamo tlb_write e tlb_read perchè dobbiamo fare round-robin nella TLB e ci serve l'indice
+- Usiamo tlb_write e tlb_read perchè dobbiamo fare round-robin nella TLB e ci serve **l'indice**
 
+
+
+# 20/8/2021
+## Eseguiamo testbin/palin e seguiamo il flow di esecuzione con il debugger
 
 ## thread_startup()
 E' la funzione che viene chiamata per un context switch, questa funzione a sua volta chiama:
@@ -46,3 +50,21 @@ Passi di as_define_region() per ottenere il numero di pagine:
 4. sz = sz & PAGE_FRAME;        |111xxxxx|xxxxxxxx|xxx2222|        |
 5. sz = sz / PAGE_SIZE;                                              => Ottengo il numero di pagine (divisione esatta senza resto)
 
+as_define_region aggiunge nella struttura addrspace quali sono i boundaries di un segmento di memoria **senza allocarla**. L'allocazione è eseguita da as_prepare_load() attraverso getppages()
+as_complete_load() non fa un cazz
+- entrypoint viene riassegnato in load_elf() una volta finita la lettura di tutti i segmenti
+
+-  Nella struct addrspace invece c'è l'indirizzo fisico del primo frame dedicato allo stack e non l'indirizzo virtuale di partenza dello stack. Questo viene assegnato da as_define_stack() alla variabile *stackptr e sarà poi passato come argomento al processo in runprogram().
+- enter_new_process() riempie il trap frame che verrà utilizzato per passare in user mode (interrupt)
+
+- Usare testbin/sort per testare tutto
+
+- All'uscita di un programma, viene chiamato thread_exit() da thread_startup()
+- Dovremmo implementare la sys_exit() che dovrà chiamare proc_destroy() che a sua volta chiama as_deactivate() che dovrebbe deallocare le pagine.
+
+- as_destroy() dealloca solo la struttura addrspace
+
+- dumbvm contiene già una funzione che riceve l'interrupt dalla TLB ed è vm_fault(). Possiamo prendere spunto per i passi da fare. 
+
+- Soluzione: page table nella struct addrspace implementata come array. L'array è indicizzato con il numero della pagina al quale si vuole accedere e contiene l'indirizzo iniziale del frame allocato. Se il frame non è allocato allora lo alloco e carico da file quello che serve.
+- Nella struttura addrspace ci dobbiamo salvare anche l'offset di partenza dei diversi segmenti nel file perchè dobbiamo caricare dal file solo una pagina, ma all'interno del file i segmenti stanno sparsi.
