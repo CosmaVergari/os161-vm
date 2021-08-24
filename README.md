@@ -68,3 +68,42 @@ as_complete_load() non fa un cazz
 
 - Soluzione: page table nella struct addrspace implementata come array. L'array è indicizzato con il numero della pagina al quale si vuole accedere e contiene l'indirizzo iniziale del frame allocato. Se il frame non è allocato allora lo alloco e carico da file quello che serve.
 - Nella struttura addrspace ci dobbiamo salvare anche l'offset di partenza dei diversi segmenti nel file perchè dobbiamo caricare dal file solo una pagina, ma all'interno del file i segmenti stanno sparsi.
+
+# 24/8/2021
+
+ /* Fault-type arguments to **vm_fault**() */
+ #define VM_FAULT_READ        0    /* A read was attempted */
+ #define VM_FAULT_WRITE       1    /* A write was attempted */
+ #define VM_FAULT_READONLY    2    /* A write to a readonly page was attempted*/
+
+ VM_FAULT_READONLY viene utilizzata quando avviene l'eccezione con codice EX_MOD
+
+
+
+ PIANO D'AZIONE!!!!
+ 1) Definiamo come fare la page table : FATTO
+ 2) Capire come funziona kmalloc e kfree
+ 3) Capire cosa intende con segments : Sono i segments dell'ELF (insieme di pagine)
+ 4) IMplementare la page table per ogni processo (la struttura dati)
+ 5) Sistemare load_elf() (come popolare la struttura dati della page table)
+ 6) Capire come salvare nella TLB gli indirizzi
+ 7) IMplementare la vm_fault
+ 7.1) Controllare la page table del processo
+ 7.2) Caricare da file
+ 8) Swapfile (inculata)
+ 9) IMplementare il log dei dati
+
+ Cosa salvare nella struttura segment? (os161-userprocess)
+ * Each ELF segment describes a contiguous region of the virtual address space.
+ * For each segment, the ELF file includes a segment image and a header, which describes:
+    - the virtual address of the start of the segment
+    - the length of the segment in the virtual address space
+    - the location of the start of the image in the ELF file
+    - the length of the image in the ELF file
+
+| Text  |xxxx| Data |xxxx| Stack     |
+
+2G   4 pagine
+1G   2 pagine
+
+| A |   | B |   |
