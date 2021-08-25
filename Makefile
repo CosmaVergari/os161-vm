@@ -16,3 +16,9 @@ debug: compile
 	gnome-terminal -- sys161 -w kernel-SUCHVM && \
 	sleep 0.5 && \
 	ddd --debugger mips-harvard-os161-gdb kernel-SUCHVM
+
+justdebug:
+	cd root && \
+	gnome-terminal -- sys161 -w kernel-SUCHVM && \
+	sleep 0.5 && \
+	ddd --debugger mips-harvard-os161-gdb kernel-SUCHVM
