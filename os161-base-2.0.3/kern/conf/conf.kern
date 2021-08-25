@@ -441,3 +441,14 @@ file		test/semunit.c
 file		test/kmalloctest.c
 file		test/fstest.c
 optfile net	test/nettest.c
+
+
+########################################
+#                                      #
+#         Such memory manager          #
+#                                      #
+########################################
+
+defoption suchvm
+optfile suchvm vm/coremap.c
+optfile suchvm vm/suchvm.c

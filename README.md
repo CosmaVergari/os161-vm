@@ -107,3 +107,12 @@ as_complete_load() non fa un cazz
 1G   2 pagine
 
 | A |   | B |   |
+
+Dubbi Cosma:
+- La page table ha dimensione fissa?
+- L'heap è grande 16M, basta per tutti i processi e page tables?
+- Tool per visualizzare la memoria in os161
+
+
+- La funzione kmalloc() chiama alloc_npages che è in dumbvm -> va modificata.
+- alloc_npages chiede pagine a muzzo, serve una gestione ad un livello più basso: coremap e basta

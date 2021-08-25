@@ -79,7 +79,7 @@ vm_bootstrap(void)
  */
 static
 void
-dumbvm_can_sleep(void)
+suchvm_can_sleep(void)
 {
 	if (CURCPU_EXISTS()) {
 		/* must not hold spinlocks */
@@ -110,7 +110,7 @@ alloc_kpages(unsigned npages)
 {
 	paddr_t pa;
 
-	dumbvm_can_sleep();
+	suchvm_can_sleep();
 	pa = getppages(npages);
 	if (pa==0) {
 		return 0;
@@ -256,7 +256,7 @@ as_create(void)
 void
 as_destroy(struct addrspace *as)
 {
-	dumbvm_can_sleep();
+	suchvm_can_sleep();
 	kfree(as);
 }
 
@@ -293,7 +293,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 {
 	size_t npages;
 
-	dumbvm_can_sleep();
+	suchvm_can_sleep();
 
 	/* Align the region. First, the base... */
 	sz += vaddr & ~(vaddr_t)PAGE_FRAME;
@@ -342,7 +342,7 @@ as_prepare_load(struct addrspace *as)
 	KASSERT(as->as_pbase2 == 0);
 	KASSERT(as->as_stackpbase == 0);
 
-	dumbvm_can_sleep();
+	suchvm_can_sleep();
 
 	as->as_pbase1 = getppages(as->as_npages1);
 	if (as->as_pbase1 == 0) {
@@ -369,7 +369,7 @@ as_prepare_load(struct addrspace *as)
 int
 as_complete_load(struct addrspace *as)
 {
-	dumbvm_can_sleep();
+	suchvm_can_sleep();
 	(void)as;
 	return 0;
 }
@@ -388,7 +388,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 {
 	struct addrspace *new;
 
-	dumbvm_can_sleep();
+	suchvm_can_sleep();
 
 	new = as_create();
 	if (new==NULL) {
