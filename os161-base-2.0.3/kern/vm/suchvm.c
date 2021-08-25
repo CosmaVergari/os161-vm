@@ -2,6 +2,7 @@
 #include <current.h>
 #include <cpu.h>
 #include <suchvm.h>
+#include <coremap.h>
 
 void suchvm_can_sleep(void)
 {
@@ -13,6 +14,14 @@ void suchvm_can_sleep(void)
         /* must not be in an interrupt handler */
         KASSERT(curthread->t_in_interrupt == 0);
     }
+}
+
+/*
+ * This function is called at the end of the boot process and
+ * it initializes the data structures required by suchvm
+ */
+void vm_bootstrap(void) {
+    coremap_init();
 }
 
 int

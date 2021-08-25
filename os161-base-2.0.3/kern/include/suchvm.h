@@ -4,5 +4,6 @@
 #include <vm.h>
 
 void suchvm_can_sleep(void);
+void vm_bootstrap(void);
 
 #endif

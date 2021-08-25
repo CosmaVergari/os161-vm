@@ -9,6 +9,7 @@
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
 static struct spinlock freemem_lock = SPINLOCK_INITIALIZER;
+
 static unsigned char *freeRamFrames = NULL; // Can be converted in bitmap
 static unsigned long *allocSize = NULL;
 static int nRamFrames = 0;
@@ -24,7 +25,12 @@ static int isTableActive()
 	return active;
 }
 
-void vm_bootstrap(void)
+/*
+ *  This function allocates the arrays containing info on the memory
+ *  and enables the coremap functionality.
+ * 	It is called by vm_bootstrap() in suchvm.c
+ */
+void coremap_init(void)
 {
 	int i;
 	nRamFrames = ((int)ram_getsize()) / PAGE_SIZE;
@@ -39,16 +45,22 @@ void vm_bootstrap(void)
 		freeRamFrames = NULL;
 		return;
 	}
+
 	for (i = 0; i < nRamFrames; i++)
 	{
 		freeRamFrames[i] = (unsigned char)0;
 		allocSize[i] = 0;
 	}
+
 	spinlock_acquire(&freemem_lock);
 	allocTableActive = 1;
 	spinlock_release(&freemem_lock);
 }
 
+/* 
+ *  Search in freeRamFrames if there is a slot npages long
+ *  of *freed* frames that can be occupied.
+ */
 static paddr_t getfreeppages(unsigned long npages)
 {
 	paddr_t addr;
@@ -57,6 +69,7 @@ static paddr_t getfreeppages(unsigned long npages)
 
 	if (!isTableActive())
 		return 0;
+
 	spinlock_acquire(&freemem_lock);
 	for (i = 0, first = found = -1; i < nRamFrames; i++)
 	{
@@ -91,15 +104,19 @@ static paddr_t getfreeppages(unsigned long npages)
 	return addr;
 }
 
+/*
+ *	Get pages to occupy, first search in free pages otherwise
+ *	call ram_stealmem()
+ */
 static paddr_t getppages(unsigned long npages)
 {
 	paddr_t addr;
 
-	/* try freed pages first */
+	/* try freed pages first, managed by coremap */
 	addr = getfreeppages(npages);
 	if (addr == 0)
 	{
-		/* call stealmem */
+		/* call stealmem if nothing found */
 		spinlock_acquire(&stealmem_lock);
 		addr = ram_stealmem(npages);
 		spinlock_release(&stealmem_lock);
@@ -114,6 +131,11 @@ static paddr_t getppages(unsigned long npages)
 	return addr;
 }
 
+/*
+ *	Free a desired number of pages starting from addr.
+ *	These free pages are now managed by coremap and not the
+ *	lower level ram module.
+ */
 static int freeppages(paddr_t addr, unsigned long npages)
 {
 	long i, first, np = (long)npages;
@@ -134,7 +156,7 @@ static int freeppages(paddr_t addr, unsigned long npages)
 	return 1;
 }
 
-/* Allocate/free some kernel-space virtual pages */
+/* Allocate/free some kernel-space virtual pages, also used in kmalloc() */
 vaddr_t alloc_kpages(unsigned npages)
 {
 	paddr_t pa;
@@ -145,7 +167,7 @@ vaddr_t alloc_kpages(unsigned npages)
 	{
 		return 0;
 	}
-	return PADDR_TO_KVADDR(pa);
+	return PADDR_TO_KVADDR(pa); /* Convert back to kernel virtual address */
 }
 
 void free_kpages(vaddr_t addr)
