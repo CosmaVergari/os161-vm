@@ -116,3 +116,42 @@ Dubbi Cosma:
 
 - La funzione kmalloc() chiama alloc_npages che è in dumbvm -> va modificata.
 - alloc_npages chiede pagine a muzzo, serve una gestione ad un livello più basso: coremap e basta
+
+
+Descrizione delle funzioni che dobbiamo implementare in addrspace.c (preso da addrspace.h):
+
+     as_create - create a new empty address space. You need to make
+                 sure this gets called in all the right places. You
+                 may find you want to change the argument list. May
+                 return NULL on out-of-memory error.
+ 
+     as_copy   - create a new address space that is an exact copy of
+                 an old one. Probably calls as_create to get a new
+                 empty address space and fill it in, but that's up to
+                 you.
+ 
+     as_activate - make curproc's address space the one currently
+                 "seen" by the processor.
+ 
+     as_deactivate - unload curproc's address space so it isn't
+                 currently "seen" by the processor. This is used to
+                 avoid potentially "seeing" it while it's being
+                 destroyed.
+ 
+     as_destroy - dispose of an address space. You may need to change
+                 the way this works if implementing user-level threads.
+ 
+     as_define_region - set up a region of memory within the address
+                 space.
+ 
+     as_prepare_load - this is called before actually loading from an
+                 executable into the address space.
+ 
+     as_complete_load - this is called when loading from an executable
+                 is complete.
+ 
+     as_define_stack - set up the stack region in the address space.
+                 (Normally called *after* as_complete_load().) Hands
+                 back the initial stack pointer for the new process.
+
+ 

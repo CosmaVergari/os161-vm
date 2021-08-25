@@ -15,17 +15,17 @@ void suchvm_can_sleep(void)
     }
 }
 
-void
-vm_tlbshootdown(const struct tlbshootdown *ts)
-{
-	(void)ts;
-	panic("dumbvm tried to do tlb shootdown?!\n");
-}
-
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
     (void) faulttype;
     (void) faultaddress;
 	return 0;
+}
+
+void
+vm_tlbshootdown(const struct tlbshootdown *ts)
+{
+	(void)ts;
+	panic("dumbvm tried to do tlb shootdown?!\n");
 }
