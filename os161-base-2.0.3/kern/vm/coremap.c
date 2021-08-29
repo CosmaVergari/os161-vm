@@ -8,20 +8,18 @@
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
-static struct spinlock freemem_lock = SPINLOCK_INITIALIZER;
-
-static unsigned char *freeRamFrames = NULL; // Can be converted in bitmap
-static unsigned long *allocSize = NULL;
+static struct spinlock coremap_lock = SPINLOCK_INITIALIZER;
+static struct coremap_entry *coremap = NULL;
 static int nRamFrames = 0;
 
-static int allocTableActive = 0;
+static int coremapActive = 0;
 
-static int isTableActive()
+static int isCoremapActive()
 {
 	int active;
-	spinlock_acquire(&freemem_lock);
-	active = allocTableActive;
-	spinlock_release(&freemem_lock);
+	spinlock_acquire(&coremap_lock);
+	active = coremapActive;
+	spinlock_release(&coremap_lock);
 	return active;
 }
 
@@ -34,48 +32,50 @@ void coremap_init(void)
 {
 	int i;
 	nRamFrames = ((int)ram_getsize()) / PAGE_SIZE;
-	/* alloc freeRamFrame and allocSize */
-	freeRamFrames = kmalloc(sizeof(unsigned char) * nRamFrames);
-	if (freeRamFrames == NULL)
-		return;
-	allocSize = kmalloc(sizeof(unsigned long) * nRamFrames);
-	if (allocSize == NULL)
+	/* alloc coremap */
+	coremap = kmalloc(sizeof(struct coremap_entry) * nRamFrames);
+	if (coremap == NULL)
 	{
-		/* reset to disable this vm management */
-		freeRamFrames = NULL;
-		return;
+		panic("Failed coremap alloc");
 	}
 
 	for (i = 0; i < nRamFrames; i++)
 	{
-		freeRamFrames[i] = (unsigned char)0;
-		allocSize[i] = 0;
+		coremap[i].entry_type = COREMAP_UNTRACKED;
+		coremap[i].vaddr = 0;
+		coremap[i].as = NULL;
+		coremap[i].allocSize = 0;
 	}
 
-	spinlock_acquire(&freemem_lock);
-	allocTableActive = 1;
-	spinlock_release(&freemem_lock);
+	spinlock_acquire(&coremap_lock);
+	coremapActive = 1;
+	spinlock_release(&coremap_lock);
 }
 
 /* 
  *  Search in freeRamFrames if there is a slot npages long
  *  of *freed* frames that can be occupied.
  */
-static paddr_t getfreeppages(unsigned long npages)
+
+// TODO : controlla i parametri passati
+static paddr_t getfreeppages(unsigned long npages,
+							 unsigned char entry_type,
+							 struct addrspace *as,
+							 vaddr_t vaddr)
 {
 	paddr_t addr;
 	long i, first, found;
 	long np = (long)npages;
 
-	if (!isTableActive())
+	if (!isCoremapActive())
 		return 0;
 
-	spinlock_acquire(&freemem_lock);
+	spinlock_acquire(&coremap_lock);
 	for (i = 0, first = found = -1; i < nRamFrames; i++)
 	{
-		if (freeRamFrames[i])
+		if (coremap[i].entry_type == COREMAP_FREED)
 		{
-			if (i == 0 || !freeRamFrames[i - 1])
+			if (i == 0 || coremap[i - 1].entry_type != COREMAP_FREED)
 				first = i; /* set first free in an interval */
 			if (i - first + 1 >= np)
 			{
@@ -89,9 +89,24 @@ static paddr_t getfreeppages(unsigned long npages)
 	{
 		for (i = found; i < found + np; i++)
 		{
-			freeRamFrames[i] = (unsigned char)0;
+			coremap[i].entry_type = entry_type;
+
+			if (entry_type == COREMAP_BUSY_USER)
+			{
+				coremap[i].as = as;
+				coremap[i].vaddr = vaddr;
+			}
+			else if (entry_type == COREMAP_BUSY_KERNEL)
+			{
+				coremap[i].as = NULL;
+				coremap[i].vaddr = 0;
+			}
+			else
+			{
+				return EINVAL;
+			}
 		}
-		allocSize[found] = np;
+		coremap[found].allocSize = np;
 		addr = (paddr_t)found * PAGE_SIZE;
 	}
 	else
@@ -99,21 +114,23 @@ static paddr_t getfreeppages(unsigned long npages)
 		addr = 0;
 	}
 
-	spinlock_release(&freemem_lock);
+	spinlock_release(&coremap_lock);
 
 	return addr;
 }
 
 /*
+ *  Only called by the kernel beacuse the user can alloc 1 page at time
  *	Get pages to occupy, first search in free pages otherwise
  *	call ram_stealmem()
  */
 static paddr_t getppages(unsigned long npages)
 {
 	paddr_t addr;
+	unsigned long i;
 
 	/* try freed pages first, managed by coremap */
-	addr = getfreeppages(npages);
+	addr = getfreeppages(npages, COREMAP_BUSY_KERNEL, NULL, 0);
 	if (addr == 0)
 	{
 		/* call stealmem if nothing found */
@@ -121,11 +138,18 @@ static paddr_t getppages(unsigned long npages)
 		addr = ram_stealmem(npages);
 		spinlock_release(&stealmem_lock);
 	}
-	if (addr != 0 && isTableActive())
+
+	/* Update the coremap to track the newly obtained pages from ram_stealmem */
+	if (addr != 0 && isCoremapActive())
 	{
-		spinlock_acquire(&freemem_lock);
-		allocSize[addr / PAGE_SIZE] = npages;
-		spinlock_release(&freemem_lock);
+		spinlock_acquire(&coremap_lock);
+		for (i = 0; i < npages; i++)
+		{
+			int page_i = (addr / PAGE_SIZE) + i;
+			coremap[page_i].entry_type = COREMAP_BUSY_KERNEL;
+		}
+		coremap[addr/PAGE_SIZE].allocSize = npages;
+		spinlock_release(&coremap_lock);
 	}
 
 	return addr;
@@ -140,18 +164,18 @@ static int freeppages(paddr_t addr, unsigned long npages)
 {
 	long i, first, np = (long)npages;
 
-	if (!isTableActive())
+	if (!isCoremapActive())
 		return 0;
 	first = addr / PAGE_SIZE;
-	KASSERT(allocSize != NULL);
 	KASSERT(nRamFrames > first);
 
-	spinlock_acquire(&freemem_lock);
+	spinlock_acquire(&coremap_lock);
 	for (i = first; i < first + np; i++)
 	{
-		freeRamFrames[i] = (unsigned char)1;
+		coremap[i].entry_type = COREMAP_FREED;
 	}
-	spinlock_release(&freemem_lock);
+	coremap[first].allocSize = 0;
+	spinlock_release(&coremap_lock);
 
 	return 1;
 }
@@ -172,12 +196,11 @@ vaddr_t alloc_kpages(unsigned npages)
 
 void free_kpages(vaddr_t addr)
 {
-	if (isTableActive())
+	if (isCoremapActive())
 	{
 		paddr_t paddr = addr - MIPS_KSEG0;
 		long first = paddr / PAGE_SIZE;
-		KASSERT(allocSize != NULL);
 		KASSERT(nRamFrames > first);
-		freeppages(paddr, allocSize[first]);
+		freeppages(paddr, coremap[first].allocSize);
 	}
 }

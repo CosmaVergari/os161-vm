@@ -154,4 +154,13 @@ Descrizione delle funzioni che dobbiamo implementare in addrspace.c (preso da ad
                  (Normally called *after* as_complete_load().) Hands
                  back the initial stack pointer for the new process.
 
- 
+
+- La pagina che verrà rimpiazzata quando non c'è più spazio sarà una pagina possibilmente anche
+di un processo diverso da quello che sta richiedendo la pagina.
+- Siccome il page replacement verrà gestitò da coremap, conviene tenere in coremap per ogni pagina fisica un riferimento a quale processo appartiene, in modo da poter modificare le page tables del processo vittima.
+
+
+Updates:
+- coremap deve gestire anche lo swap in e out da file?
+- Dobbiamo tenere la allocSize salvata
+- entry_type gestisce tutto

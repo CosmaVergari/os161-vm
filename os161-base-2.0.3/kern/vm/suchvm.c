@@ -36,5 +36,5 @@ void
 vm_tlbshootdown(const struct tlbshootdown *ts)
 {
 	(void)ts;
-	panic("dumbvm tried to do tlb shootdown?!\n");
+	panic("suchvm tried to do tlb shootdown?!\n");
 }
