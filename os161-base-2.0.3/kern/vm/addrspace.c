@@ -33,6 +33,7 @@
 #include <addrspace.h>
 #include <vm.h>
 #include <proc.h>
+#include <segments.h>
 
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
@@ -46,39 +47,53 @@ as_create(void)
 	struct addrspace *as;
 
 	as = kmalloc(sizeof(struct addrspace));
-	if (as == NULL) {
+	if (as == NULL)
+	{
 		return NULL;
 	}
 
-	/*
-	 * Initialize as needed.
-	 */
+	as->seg1 = NULL;
+	as->seg2 = NULL;
+	as->seg_stack = NULL;
 
 	return as;
 }
 
-int
-as_copy(struct addrspace *old, struct addrspace **ret)
+int as_copy(struct addrspace *old, struct addrspace **ret)
 {
 	struct addrspace *newas;
 
 	newas = as_create();
-	if (newas==NULL) {
+	if (newas == NULL)
+	{
 		return ENOMEM;
 	}
 
-	/*
-	 * Write this.
-	 */
+	if (!seg_copy(old->seg1, &(newas->seg1)))
+	{
+		as_destroy(newas);
+		return ENOMEM;
+	}
+	if (!seg_copy(old->seg2, &(newas->seg2)))
+	{
+		seg_destroy(newas->seg1);
+		as_destroy(newas);
+		return ENOMEM;
+	}
+	if (!seg_copy(old->seg_stack, &(newas->seg_stack)))
+	{
 
-	(void)old;
+		seg_destroy(newas->seg1);
+		seg_destroy(newas->seg2);
+		as_destroy(newas);
+		return ENOMEM;
+	}
 
 	*ret = newas;
 	return 0;
 }
 
-void
-as_destroy(struct addrspace *as)
+void as_destroy(struct addrspace *as)
 {
 	/*
 	 * Clean up as needed.
@@ -87,13 +102,13 @@ as_destroy(struct addrspace *as)
 	kfree(as);
 }
 
-void
-as_activate(void)
+void as_activate(void)
 {
 	struct addrspace *as;
 
 	as = proc_getas();
-	if (as == NULL) {
+	if (as == NULL)
+	{
 		/*
 		 * Kernel thread without an address space; leave the
 		 * prior address space in place.
@@ -106,8 +121,7 @@ as_activate(void)
 	 */
 }
 
-void
-as_deactivate(void)
+void as_deactivate(void)
 {
 	/*
 	 * Write this. For many designs it won't need to actually do
@@ -126,9 +140,8 @@ as_deactivate(void)
  * moment, these are ignored. When you write the VM system, you may
  * want to implement them.
  */
-int
-as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
-		 int readable, int writeable, int executable)
+int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
+					 int readable, int writeable, int executable)
 {
 	/*
 	 * Write this.
@@ -143,8 +156,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	return ENOSYS;
 }
 
-int
-as_prepare_load(struct addrspace *as)
+int as_prepare_load(struct addrspace *as)
 {
 	/*
 	 * Write this.
@@ -154,8 +166,7 @@ as_prepare_load(struct addrspace *as)
 	return 0;
 }
 
-int
-as_complete_load(struct addrspace *as)
+int as_complete_load(struct addrspace *as)
 {
 	/*
 	 * Write this.
@@ -165,8 +176,7 @@ as_complete_load(struct addrspace *as)
 	return 0;
 }
 
-int
-as_define_stack(struct addrspace *as, vaddr_t *stackptr)
+int as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
 	/*
 	 * Write this.
@@ -179,4 +189,3 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 
 	return 0;
 }
-

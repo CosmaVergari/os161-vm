@@ -451,4 +451,6 @@ optfile net	test/nettest.c
 
 defoption suchvm
 optfile suchvm vm/coremap.c
+optfile suchvm vm/pt.c
+optfile suchvm vm/segments.c
 optfile suchvm vm/suchvm.c
