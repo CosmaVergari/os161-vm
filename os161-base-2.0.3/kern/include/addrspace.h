@@ -38,6 +38,7 @@
 #include <vm.h>
 #include <segments.h>
 #include "opt-dumbvm.h"
+#include "opt-suchvm.h"
 
 struct vnode;
 
@@ -58,7 +59,8 @@ struct addrspace {
         paddr_t as_pbase2;
         size_t as_npages2;
         paddr_t as_stackpbase;
-#else
+#endif
+#if OPT_SUCHVM
         /* SuchVM structure */
         struct prog_segment *seg1, *seg2, *seg_stack;
 #endif
