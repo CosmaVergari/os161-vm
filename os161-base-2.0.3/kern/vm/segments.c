@@ -1,6 +1,7 @@
 #include <types.h>
 #include <kern/errno.h>
 #include <lib.h>
+#include <coremap.h>
 #include <vm.h>
 #include <segments.h>
 
@@ -40,15 +41,6 @@ int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, of
     KASSERT(v != NULL);
     KASSERT(!read && !write && !execute);
 
-    /*  Part moved to prepare
-     *
-     *ps->pagetable = pt_create(n_pages, base_vaddr);
-     *if (ps->pagetable == NULL)
-     *{
-     *    return ENOMEM;
-     *}
-     */
-
     ps->base_vaddr = base_vaddr;
     ps->file_size = file_size;
     ps->file_offset = file_offset;
@@ -79,14 +71,6 @@ int seg_define_stack(struct prog_segment *ps, vaddr_t base_vaddr, size_t n_pages
     /* Sanity checks on variables */
     KASSERT(base_vaddr != 0);
     KASSERT(n_pages > 0);
-    /*  Part moved to prepare
-     *
-     *ps->pagetable = pt_create(n_pages, base_vaddr);
-     *if (ps->pagetable == NULL)
-     *{
-     *    return ENOMEM;
-     *}
-     */
 
     ps->base_vaddr = base_vaddr;
     ps->file_size = 0;
@@ -106,14 +90,13 @@ int seg_define_stack(struct prog_segment *ps, vaddr_t base_vaddr, size_t n_pages
 /*
  *  Function used to alloc the page table of each segment
  *
- *
  */
 
 int seg_prepare(struct prog_segment *ps){
     KASSERT(ps != NULL);
     KASSERT(ps->pagetable == NULL);
 
-    ps->pagetable = pt_create(n_pages, base_vaddr);
+    ps->pagetable = pt_create(ps ->n_pages, ps -> base_vaddr);
     if (ps->pagetable == NULL)
     {
         return ENOMEM;
@@ -146,7 +129,7 @@ int seg_copy(struct prog_segment *old, struct prog_segment **ret)
     return 0;
 }
 
-static void load_page(struct prog_segment *ps, )
+/* TODO: static void load_page(struct prog_segment *ps, ) */
 
 paddr_t seg_get_paddr(struct prog_segment *ps, vaddr_t vaddr) {
     paddr_t paddr;
@@ -166,7 +149,7 @@ paddr_t seg_get_paddr(struct prog_segment *ps, vaddr_t vaddr) {
          * if there is not enough space (manged by coremap) 
          */
         paddr = alloc_upage(vaddr);
-
+        /* TODO: load_page() */
     }
     return paddr;
 }

@@ -10,10 +10,6 @@
 #include <coremap.h>
 #include <segments.h>
 
-/* Always have 72k of user stack
- * (this must be > 64K so argument blocks of size ARG_MAX will fit) */
-#define SUCHVM_STACKPAGES 18
-
 /* This index is used to perform round-robin entry replacement
  * in the TLB. It is not reset in the as_activate function because
  * it doesn't matter from where the TLB starts saving the entries

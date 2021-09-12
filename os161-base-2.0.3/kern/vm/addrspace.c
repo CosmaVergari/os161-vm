@@ -33,6 +33,8 @@
 #include <addrspace.h>
 #include <vm.h>
 #include <proc.h>
+#include <spl.h>
+#include <mips/tlb.h>
 #include <segments.h>
 #include <suchvm.h>
 
@@ -111,6 +113,8 @@ void as_destroy(struct addrspace *as)
 void as_activate(void)
 {
 	struct addrspace *as;
+	unsigned int i;
+	int spl;
 
 	as = proc_getas();
 	if (as == NULL)
@@ -122,15 +126,12 @@ void as_activate(void)
 		return;
 	}
 
-	/*
-	 * Write this.
-	 */
-
 	/* Disable interrupts on this CPU while frobbing the TLB. */
 	spl = splhigh();
 
-	for (i=0; i<NUM_TLB; i++) {
-			tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+	for (i = 0; i < NUM_TLB; i++)
+	{
+		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
 	}
 
 	splx(spl);
@@ -156,7 +157,7 @@ void as_deactivate(void)
  * want to implement them.
  */
 int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
-					off_t offset, int readable, int writeable, int executable)
+					 off_t offset, struct vnode *v, int readable, int writeable, int executable)
 {
 	/*
 	 * Write this.
@@ -165,7 +166,7 @@ int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	size_t npages;
 
 	/* Align the region. First, the base... */
-    memsize += vaddr & ~(vaddr_t)PAGE_FRAME;
+	memsize += vaddr & ~(vaddr_t)PAGE_FRAME;
 	vaddr &= PAGE_FRAME;
 
 	/* ...and now the length. */
@@ -181,12 +182,14 @@ int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	 *
 	*/
 
-	if (as->seg1 == NULL) {
-		seg_define(as->seg1, vaddr, memsize, offset, npages, readable, writeable, executable);
+	if (as->seg1 == NULL)
+	{
+		seg_define(as->seg1, vaddr, memsize, offset, npages, v, readable, writeable, executable);
 		return 0;
 	}
-	if (as->seg2 == NULL) {
-		seg_define(as->seg2, vaddr, memsize, offset, npages, readable, writeable, executable);
+	if (as->seg2 == NULL)
+	{
+		seg_define(as->seg2, vaddr, memsize, offset, npages, v, readable, writeable, executable);
 		return 0;
 	}
 
@@ -205,11 +208,13 @@ int as_prepare_load(struct addrspace *as)
 	 *	that are allocated and not loaded with values
 	 */
 
-	if ( seg_prepare( as->seg1 ) != 0 ){
+	if (seg_prepare(as->seg1) != 0)
+	{
 		return ENOMEM;
 	}
-	
-	if ( seg_prepare( as->seg2 ) != 0 ){
+
+	if (seg_prepare(as->seg2) != 0)
+	{
 		return ENOMEM;
 	}
 
@@ -218,10 +223,7 @@ int as_prepare_load(struct addrspace *as)
 
 int as_complete_load(struct addrspace *as)
 {
-	// TODO
-	/*
-	 * Write this.
-	 */
+	// TODO: Check if needed
 
 	(void)as;
 	return 0;
@@ -229,19 +231,17 @@ int as_complete_load(struct addrspace *as)
 
 int as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
-
-
-	(void)as;
 	KASSERT(as != NULL);
+	/* Check if the stack has not been already created */
 	KASSERT(as->seg_stack == NULL);
 
 	/*
-	 *
-	 *
-	 *
+	 * In os161 the stack grows downwards from 0x80000000 (USERSTACK).
+	 * However in the segment we save the **base** virtual address we need
+	 * to compute it
 	 */
 
-	if (seg_define_stack(as->seg_stack, USERSTACK - (SUCHVM_STACKPAGES*PAGE_SIZE), SUCHVM_STACKPAGES) != 0)
+	if (seg_define_stack(as->seg_stack, USERSTACK - (SUCHVM_STACKPAGES * PAGE_SIZE), SUCHVM_STACKPAGES) != 0)
 	{
 		return ENOMEM;
 	}
