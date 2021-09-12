@@ -178,3 +178,4 @@ Nota: free list al posto di tenere un array di pagine libere ed occupate nella c
 - Non si fa lo swap delle pagine del kernel
 
 - TODO: Rimandiamo caricare la prima pagina dell'entrypoint a dopo
+- TODO: Implementare la syscall exit per fare la destroy dell'address space del processo.

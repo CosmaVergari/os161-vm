@@ -66,6 +66,11 @@ int as_copy(struct addrspace *old, struct addrspace **ret)
 {
 	struct addrspace *newas;
 
+	KASSERT(old != NULL);
+	KASSERT(old->seg1 != NULL);
+	KASSERT(old->seg2 != NULL);
+	KASSERT(old->seg_stack != NULL);
+
 	newas = as_create();
 	if (newas == NULL)
 	{
@@ -98,7 +103,7 @@ int as_copy(struct addrspace *old, struct addrspace **ret)
 
 void as_destroy(struct addrspace *as)
 {
-	/*
+	/* TODO
 	 * Clean up as needed.
 	 */
 	KASSERT(as != NULL);
@@ -159,11 +164,9 @@ void as_deactivate(void)
 int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 					 off_t offset, struct vnode *v, int readable, int writeable, int executable)
 {
-	/*
-	 * Write this.
-	 */
-	KASSERT(as != NULL);
 	size_t npages;
+
+	KASSERT(as != NULL);
 
 	/* Align the region. First, the base... */
 	memsize += vaddr & ~(vaddr_t)PAGE_FRAME;
@@ -175,20 +178,27 @@ int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	npages = memsize / PAGE_SIZE;
 
 	/*
-	 *
 	 * readable 	100
 	 * writable 	010
 	 * executable 	001
-	 *
 	*/
-
 	if (as->seg1 == NULL)
 	{
+		as->seg1 = seg_create();
+		if (as->seg1 == NULL)
+		{
+			return ENOMEM;
+		}
 		seg_define(as->seg1, vaddr, memsize, offset, npages, v, readable, writeable, executable);
 		return 0;
 	}
 	if (as->seg2 == NULL)
 	{
+		as->seg2 = seg_create();
+		if (as->seg2 == NULL)
+		{
+			return ENOMEM;
+		}
 		seg_define(as->seg2, vaddr, memsize, offset, npages, v, readable, writeable, executable);
 		return 0;
 	}
@@ -241,6 +251,11 @@ int as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	 * to compute it
 	 */
 
+	as->seg_stack = seg_create();
+	if (as->seg_stack == NULL)
+	{
+		return ENOMEM;
+	}
 	if (seg_define_stack(as->seg_stack, USERSTACK - (SUCHVM_STACKPAGES * PAGE_SIZE), SUCHVM_STACKPAGES) != 0)
 	{
 		return ENOMEM;

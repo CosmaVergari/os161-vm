@@ -65,7 +65,7 @@ paddr_t pt_get_entry(struct pagetable *pt, vaddr_t vaddr)
     KASSERT(pt != NULL);
     KASSERT(pt->pages != NULL);
     KASSERT(vaddr >= pt->start_vaddr);
-    KASSERT(vaddr <= (pt->start_vaddr) + (pt->size * PAGE_SIZE));
+    KASSERT(vaddr < (pt->start_vaddr) + (pt->size * PAGE_SIZE));
 
     unsigned long page_index = (vaddr - (pt->start_vaddr)) / PAGE_SIZE;
     if (pt->pages[page_index] == PT_UNPOPULATED_PAGE)

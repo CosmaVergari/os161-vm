@@ -31,15 +31,14 @@ int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, of
     KASSERT(ps != NULL);
     /* Ensure that structure is still empty */
     KASSERT(ps->pagetable == NULL);
-    KASSERT(ps->base_vaddr = 0);
+    KASSERT(ps->base_vaddr == 0);
 
     /* Sanity checks on variables */
     KASSERT(base_vaddr != 0);
     KASSERT(file_size > 0);
-    KASSERT(file_offset > 0);
     KASSERT(n_pages > 0);
     KASSERT(v != NULL);
-    KASSERT(!read && !write && !execute);
+    KASSERT(read || write || execute);
 
     ps->base_vaddr = base_vaddr;
     ps->file_size = file_size;
@@ -66,7 +65,7 @@ int seg_define_stack(struct prog_segment *ps, vaddr_t base_vaddr, size_t n_pages
     KASSERT(ps != NULL);
     /* Ensure that structure is still empty */
     KASSERT(ps->pagetable == NULL);
-    KASSERT(ps->base_vaddr = 0);
+    KASSERT(ps->base_vaddr == 0);
 
     /* Sanity checks on variables */
     KASSERT(base_vaddr != 0);
@@ -138,7 +137,7 @@ paddr_t seg_get_paddr(struct prog_segment *ps, vaddr_t vaddr) {
     KASSERT(ps != NULL);
     KASSERT(ps -> n_pages != 0);
     KASSERT(ps -> pagetable != NULL);
-    KASSERT(vaddr > ps -> base_vaddr);
+    KASSERT(vaddr >= ps -> base_vaddr);
     KASSERT(vaddr < (ps -> base_vaddr) + (ps -> n_pages * PAGE_SIZE));
 
     /* Get physical address from page table */
