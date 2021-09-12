@@ -22,6 +22,7 @@ struct prog_segment *seg_create(void);
 int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, off_t file_offset,
                size_t n_pages, struct vnode *v, char read, char write, char execute);
 int seg_copy(struct prog_segment *old, struct prog_segment **ret);
+paddr_t seg_get_paddr(struct prog_segment *ps, vaddr_t addr);
 void seg_destroy(struct prog_segment *ps);
 
 #endif /* SEGMENTS_H */

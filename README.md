@@ -161,6 +161,20 @@ di un processo diverso da quello che sta richiedendo la pagina.
 
 
 Updates:
-- coremap deve gestire anche lo swap in e out da file?
+- coremap deve gestire anche lo swap in e out da file -> in parte, l'altra parte lo fa swap.c
 - Dobbiamo tenere la allocSize salvata
 - entry_type gestisce tutto
+
+
+# 11/9/2021
+Aggiornamenti:
+- coremap chiama ram_stealmem quando ha bisogno di memoria ram. Non viene gestito il caso in cui addr == 0, ossia quando non c'è più ram disponibile.
+
+Domanda: ma quando tutte le pagine sono occupate chi salva su disco coremap o suchvm? -> coremap
+
+Nota: bisogna tenersi l'indice dell'ultimo elemento salvato nella tlb per capire dove salvare l'indirizzo della nuova pagina nella TLB. Al context switch forse questo contatore dev'essere resettato? -> No
+Nota: free list al posto di tenere un array di pagine libere ed occupate nella coremap?
+
+- Non si fa lo swap delle pagine del kernel
+
+- TODO: Rimandiamo caricare la prima pagina dell'entrypoint a dopo

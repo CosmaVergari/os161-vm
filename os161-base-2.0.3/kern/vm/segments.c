@@ -88,6 +88,31 @@ int seg_copy(struct prog_segment *old, struct prog_segment **ret)
     return 0;
 }
 
+static void load_page(struct prog_segment *ps, )
+
+paddr_t seg_get_paddr(struct prog_segment *ps, vaddr_t vaddr) {
+    paddr_t paddr;
+
+    /* Sanity checks if segment is populated and address is valid */
+    KASSERT(ps != NULL);
+    KASSERT(ps -> n_pages != 0);
+    KASSERT(ps -> pagetable != NULL);
+    KASSERT(vaddr > ps -> base_vaddr);
+    KASSERT(vaddr < (ps -> base_vaddr) + (ps -> n_pages * PAGE_SIZE));
+
+    /* Get physical address from page table */
+    paddr = pt_get_entry(ps ->pagetable, vaddr);
+    if (paddr == PT_UNPOPULATED_PAGE) {
+        /* 
+         * The page must be loaded from DISK and evict another 
+         * if there is not enough space (manged by coremap) 
+         */
+        paddr = alloc_upage(vaddr);
+
+    }
+    return paddr;
+}
+
 void seg_destroy(struct prog_segment *ps)
 {
     KASSERT(ps != NULL);
