@@ -3,8 +3,11 @@
 #include <spinlock.h>
 #include <current.h>
 #include <cpu.h>
+#include <proc.h>
+#include <addrspace.h>
 #include <suchvm.h>
 #include <coremap.h>
+
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
@@ -148,7 +151,7 @@ static paddr_t getppages(unsigned long npages)
 			int page_i = (addr / PAGE_SIZE) + i;
 			coremap[page_i].entry_type = COREMAP_BUSY_KERNEL;
 		}
-		coremap[addr/PAGE_SIZE].allocSize = npages;
+		coremap[addr / PAGE_SIZE].allocSize = npages;
 		spinlock_release(&coremap_lock);
 	}
 
@@ -203,4 +206,59 @@ void free_kpages(vaddr_t addr)
 		KASSERT(nRamFrames > first);
 		freeppages(paddr, coremap[first].allocSize);
 	}
+}
+
+/* Paging support */
+
+/*
+ *  Only called by the user to alloc 1 page 
+ *	First search in free pages otherwise call ram_stealmem()
+ */
+static paddr_t getppage_user(vaddr_t associated_vaddr)
+{
+	struct addrspace *as;
+	paddr_t addr;
+
+	as = proc_getas();
+	KASSERT(as != NULL); /* get_a_page shouldn't be called before VM is initialized */
+
+	/* The virtual address should be that of the beginning of a page */
+	KASSERT((associated_vaddr & PAGE_FRAME) == associated_vaddr);
+
+	/* try freed pages first that are already managed by coremap */
+	addr = getfreeppages(1, COREMAP_BUSY_USER, as, associated_vaddr);
+	if (addr == 0)
+	{
+		/* call stealmem if nothing found */
+		spinlock_acquire(&stealmem_lock);
+		addr = ram_stealmem(1);
+		spinlock_release(&stealmem_lock);
+	}
+
+	/* Update the coremap to track the newly obtained page from ram_stealmem */
+	if (isCoremapActive())
+	{
+		if (addr != 0)
+		{
+			spinlock_acquire(&coremap_lock);
+			int page_i = (addr / PAGE_SIZE);
+			coremap[page_i].entry_type = COREMAP_BUSY_USER;
+			coremap[page_i].allocSize = 1;
+			coremap[page_i].as = as;
+			coremap[page_i].vaddr = associated_vaddr;
+			spinlock_release(&coremap_lock);
+		}
+		/* TODO: If returned addr is 0 (exhausted ram space) we need to swap */
+	}
+
+	return addr;
+}
+
+paddr_t alloc_upage(vaddr_t vaddr) {
+	paddr_t pa;
+
+	suchvm_can_sleep();
+	pa = getppage_user(vaddr);
+	
+	return pa;
 }

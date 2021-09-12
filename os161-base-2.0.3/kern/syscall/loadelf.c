@@ -59,7 +59,9 @@
 #include <addrspace.h>
 #include <vnode.h>
 #include <elf.h>
+#include "opt-suchvm.h"
 
+#ifndef OPT_SUCHVM
 /*
  * Load a segment at virtual address VADDR. The segment in memory
  * extends from VADDR up to (but not including) VADDR+MEMSIZE. The
@@ -144,6 +146,7 @@ load_segment(struct addrspace *as, struct vnode *v,
 
 	return result;
 }
+#endif 	/* OPT_SUCHVM */
 
 /*
  * Load an ELF executable user program into the current address space.
@@ -260,6 +263,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 		return result;
 	}
 
+#ifndef OPT_SUCHVM
 	/*
 	 * Now actually load each segment.
 	 */
@@ -297,6 +301,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 			return result;
 		}
 	}
+#endif	/* OPT_SUCHVM */
 
 	result = as_complete_load(as);
 	if (result) {
