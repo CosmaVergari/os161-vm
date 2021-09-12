@@ -3,9 +3,11 @@
 
 #define PAGE_RONLY 0
 #define PAGE_RW 1
+#define PAGE_STACK 2
 
 #include <types.h>
 #include <pt.h>
+
 
 struct prog_segment
 {
@@ -21,6 +23,8 @@ struct prog_segment
 struct prog_segment *seg_create(void);
 int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, off_t file_offset,
                size_t n_pages, struct vnode *v, char read, char write, char execute);
+int seg_define_stack(struct prog_segment *ps, vaddr_t base_vaddr, size_t n_pages);
+int seg_prepare(struct prog_segment *ps);
 int seg_copy(struct prog_segment *old, struct prog_segment **ret);
 void seg_destroy(struct prog_segment *ps);
 
