@@ -156,7 +156,7 @@ void as_deactivate(void)
  * want to implement them.
  */
 int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
-					 int readable, int writeable, int executable)
+					off_t offset, int readable, int writeable, int executable)
 {
 	/*
 	 * Write this.
@@ -182,14 +182,13 @@ int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	*/
 
 	if (as->seg1 == NULL) {
-		seg_define(as->seg1, vaddr, memsize, /* TODO offset*/, npages, readable, writeable, executable);
+		seg_define(as->seg1, vaddr, memsize, offset, npages, readable, writeable, executable);
 		return 0;
 	}
 	if (as->seg2 == NULL) {
-		seg_define(as->seg2, vaddr, memsize, /* TODO offset*/, npages, readable, writeable, executable);
+		seg_define(as->seg2, vaddr, memsize, offset, npages, readable, writeable, executable);
 		return 0;
 	}
-
 
 	/*
 	 * Support for more than two regions is not available.
