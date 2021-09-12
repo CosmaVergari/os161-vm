@@ -34,6 +34,7 @@
 #include <vm.h>
 #include <proc.h>
 #include <segments.h>
+#include <suchvm.h>
 
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
@@ -98,6 +99,11 @@ void as_destroy(struct addrspace *as)
 	/*
 	 * Clean up as needed.
 	 */
+	KASSERT(as != NULL);
+
+	seg_destroy(as->seg1);
+	seg_destroy(as->seg2);
+	seg_destroy(as->seg_stack);
 
 	kfree(as);
 }
@@ -119,6 +125,15 @@ void as_activate(void)
 	/*
 	 * Write this.
 	 */
+
+	/* Disable interrupts on this CPU while frobbing the TLB. */
+	spl = splhigh();
+
+	for (i=0; i<NUM_TLB; i++) {
+			tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+	}
+
+	splx(spl);
 }
 
 void as_deactivate(void)
@@ -146,28 +161,65 @@ int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	/*
 	 * Write this.
 	 */
+	KASSERT(as != NULL);
+	size_t npages;
 
-	(void)as;
-	(void)vaddr;
-	(void)memsize;
-	(void)readable;
-	(void)writeable;
-	(void)executable;
+	/* Align the region. First, the base... */
+    memsize += vaddr & ~(vaddr_t)PAGE_FRAME;
+	vaddr &= PAGE_FRAME;
+
+	/* ...and now the length. */
+	memsize = (memsize + PAGE_SIZE - 1) & PAGE_FRAME;
+
+	npages = memsize / PAGE_SIZE;
+
+	/*
+	 *
+	 * readable 	100
+	 * writable 	010
+	 * executable 	001
+	 *
+	*/
+
+	if (as->seg1 == NULL) {
+		seg_define(as->seg1, vaddr, memsize, /* TODO offset*/, npages, readable, writeable, executable);
+		return 0;
+	}
+	if (as->seg2 == NULL) {
+		seg_define(as->seg2, vaddr, memsize, /* TODO offset*/, npages, readable, writeable, executable);
+		return 0;
+	}
+
+
+	/*
+	 * Support for more than two regions is not available.
+	 * // TODO do we need to implement it?
+	 */
+	kprintf("dumbvm: Warning: too many regions\n");
 	return ENOSYS;
 }
 
 int as_prepare_load(struct addrspace *as)
 {
-	/*
-	 * Write this.
+	/*	as_prepare_load is called only once
+	 * 	here prepare for segment and the relative page table, 
+	 *	that are allocated and not loaded with values
 	 */
 
-	(void)as;
+	if ( seg_prepare( as->seg1 ) != 0 ){
+		return ENOMEM;
+	}
+	
+	if ( seg_prepare( as->seg2 ) != 0 ){
+		return ENOMEM;
+	}
+
 	return 0;
 }
 
 int as_complete_load(struct addrspace *as)
 {
+	// TODO
 	/*
 	 * Write this.
 	 */
@@ -178,11 +230,22 @@ int as_complete_load(struct addrspace *as)
 
 int as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
-	/*
-	 * Write this.
-	 */
+
 
 	(void)as;
+	KASSERT(as != NULL);
+	KASSERT(as->seg_stack == NULL);
+
+	/*
+	 *
+	 *
+	 *
+	 */
+
+	if (seg_define_stack(as->seg_stack, USERSTACK - (SUCHVM_STACKPAGES*PAGE_SIZE), SUCHVM_STACKPAGES) != 0)
+	{
+		return ENOMEM;
+	}
 
 	/* Initial user-level stack pointer */
 	*stackptr = USERSTACK;

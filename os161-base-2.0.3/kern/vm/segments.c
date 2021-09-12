@@ -4,6 +4,7 @@
 #include <vm.h>
 #include <segments.h>
 
+
 struct prog_segment *seg_create(void)
 {
     struct prog_segment *seg = kmalloc(sizeof(struct prog_segment));
@@ -39,11 +40,14 @@ int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, of
     KASSERT(v != NULL);
     KASSERT(!read && !write && !execute);
 
-    ps->pagetable = pt_create(n_pages, base_vaddr);
-    if (ps->pagetable == NULL)
-    {
-        return ENOMEM;
-    }
+    /*  Part moved to prepare
+     *
+     *ps->pagetable = pt_create(n_pages, base_vaddr);
+     *if (ps->pagetable == NULL)
+     *{
+     *    return ENOMEM;
+     *}
+     */
 
     ps->base_vaddr = base_vaddr;
     ps->file_size = file_size;
@@ -62,6 +66,60 @@ int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, of
     (void)execute;
 
     return 0;
+}
+
+
+int seg_define_stack(struct prog_segment *ps, vaddr_t base_vaddr, size_t n_pages)
+{
+    KASSERT(ps != NULL);
+    /* Ensure that structure is still empty */
+    KASSERT(ps->pagetable == NULL);
+    KASSERT(ps->base_vaddr = 0);
+
+    /* Sanity checks on variables */
+    KASSERT(base_vaddr != 0);
+    KASSERT(n_pages > 0);
+    /*  Part moved to prepare
+     *
+     *ps->pagetable = pt_create(n_pages, base_vaddr);
+     *if (ps->pagetable == NULL)
+     *{
+     *    return ENOMEM;
+     *}
+     */
+
+    ps->base_vaddr = base_vaddr;
+    ps->file_size = 0;
+    ps->file_offset = 0;
+    ps->n_pages = n_pages;
+    ps->elf_vnode = NULL;
+    ps->permissions = PAGE_STACK;
+
+    ps->pagetable = pt_create(n_pages, base_vaddr);
+    if (ps->pagetable == NULL)
+    {
+        return ENOMEM;
+    }
+    return 0;
+}
+
+/*
+ *  Function used to alloc the page table of each segment
+ *
+ *
+ */
+
+int seg_prepare(struct prog_segment *ps){
+    KASSERT(ps != NULL);
+    KASSERT(ps->pagetable == NULL);
+
+    ps->pagetable = pt_create(n_pages, base_vaddr);
+    if (ps->pagetable == NULL)
+    {
+        return ENOMEM;
+    }
+    return 0;
+
 }
 
 int seg_copy(struct prog_segment *old, struct prog_segment **ret)
@@ -116,10 +174,11 @@ paddr_t seg_get_paddr(struct prog_segment *ps, vaddr_t vaddr) {
 void seg_destroy(struct prog_segment *ps)
 {
     KASSERT(ps != NULL);
-
+    
     if (ps->pagetable != NULL)
     {
         kfree(ps->pagetable);
     }
+
     kfree(ps);
 }

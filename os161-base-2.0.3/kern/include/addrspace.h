@@ -62,7 +62,9 @@ struct addrspace {
 #endif
 #if OPT_SUCHVM
         /* SuchVM structure */
-        struct prog_segment *seg1, *seg2, *seg_stack;
+        struct prog_segment *seg1;
+        struct prog_segment *seg2; 
+        struct prog_segment *seg_stack;
 #endif
 };
 
@@ -115,6 +117,7 @@ void              as_destroy(struct addrspace *);
 
 int               as_define_region(struct addrspace *as,
                                    vaddr_t vaddr, size_t sz,
+                                   off_t offset,
                                    int readable,
                                    int writeable,
                                    int executable);
