@@ -3,7 +3,9 @@
 
 #define PAGE_RONLY 0
 #define PAGE_RW 1
-#define PAGE_STACK 2
+#define PAGE_EX 2
+#define PAGE_STACK 3
+
 
 #include <types.h>
 #include <pt.h>

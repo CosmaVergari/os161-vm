@@ -18,6 +18,7 @@ struct pagetable {
 struct pagetable *pt_create(unsigned long size, vaddr_t start_address);
 int pt_copy(struct pagetable *old, struct pagetable **ret);
 paddr_t pt_get_entry(struct pagetable *pt, vaddr_t vaddr);
+void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr);
 void pt_free(struct pagetable *pt);
 
 #endif /* PT_H */

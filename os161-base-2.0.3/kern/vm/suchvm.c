@@ -150,6 +150,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
      * It also performs loading from disk and swapping if necessary
      */
     paddr = seg_get_paddr(ps, faultaddress);
+    /* TODO: Zero the region if filesize < memsize */
 
     /* make sure it's page-aligned */
 	KASSERT((paddr & PAGE_FRAME) == paddr);

@@ -78,6 +78,18 @@ paddr_t pt_get_entry(struct pagetable *pt, vaddr_t vaddr)
     }
 }
 
+void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)
+{
+    KASSERT(pt != NULL);
+    KASSERT(pt->pages != NULL);
+    KASSERT(vaddr >= pt->start_vaddr);
+    KASSERT(vaddr < (pt->start_vaddr) + (pt->size * PAGE_SIZE));
+
+    unsigned long page_index = (vaddr - (pt->start_vaddr)) / PAGE_SIZE;
+    KASSERT(pt->pages[page_index] == PT_UNPOPULATED_PAGE);
+    pt->pages[page_index] = paddr;
+}
+
 void pt_free(struct pagetable *pt)
 {
     KASSERT(pt != NULL);
