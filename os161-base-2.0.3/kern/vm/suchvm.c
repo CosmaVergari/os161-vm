@@ -62,6 +62,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 {
     unsigned int tlb_index;
     int spl;
+    char unpopulated;
     vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
     paddr_t paddr;
     uint32_t entry_hi, entry_lo;
@@ -155,8 +156,8 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
      * It also loads the page from disk if it was not in the page table
      * and if it is not in a stack segment.
      */
+    unpopulated = 0;
     paddr = seg_get_paddr(ps, faultaddress);
-
     if (paddr == PT_UNPOPULATED_PAGE)
     {
         /* 
@@ -164,6 +165,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
          */
         paddr = alloc_upage(faultaddress);
         seg_add_pt_entry(ps, faultaddress, paddr);
+        unpopulated = 1;
     }
 
     /* make sure it's page-aligned */
@@ -185,9 +187,14 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
     tlb_write(entry_hi, entry_lo, tlb_index);
     splx(spl);
 
-    /* Load page from file */
-    if (ps->permissions != PAGE_STACK)
-        seg_load_page(ps, faultaddress, paddr);
+    /* Load page from file if it was not populated before */
+    if (ps->permissions != PAGE_STACK && unpopulated)
+    {
+        if (!seg_load_page(ps, faultaddress, paddr))
+        {
+            return EFAULT;
+        }
+    }
 
     return 0;
 }
