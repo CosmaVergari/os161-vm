@@ -8,9 +8,10 @@
 #include <vm.h>
 #include <segments.h>
 
+/*
 static void zero_a_region(paddr_t paddr, size_t n)
 {
-    /* static, so initialized as zero */
+    //static, so initialized as zero
     static char zeros[16];
     size_t amt, i;
 
@@ -27,10 +28,15 @@ static void zero_a_region(paddr_t paddr, size_t n)
         {
             amt = n;
         }
-        memcpy((void *)paddr + (i * sizeof(zeros)), (void *)zeros, amt);
+        memcpy((void *)PADDR_TO_KVADDR(paddr + (i * sizeof(zeros<))), (void *)zeros, amt);
         n -= amt;
         i++;
     }
+}
+*/
+static void zero_a_region(paddr_t paddr, size_t n)
+{
+    bzero((void *) PADDR_TO_KVADDR(paddr), n);
 }
 
 struct prog_segment *seg_create(void)
