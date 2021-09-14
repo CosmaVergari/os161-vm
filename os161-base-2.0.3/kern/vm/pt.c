@@ -67,7 +67,15 @@ paddr_t pt_get_entry(struct pagetable *pt, vaddr_t vaddr)
     KASSERT(vaddr >= pt->start_vaddr);
     KASSERT(vaddr < (pt->start_vaddr) + (pt->size * PAGE_SIZE));
 
-    unsigned long page_index = (vaddr - (pt->start_vaddr)) / PAGE_SIZE;
+    /* 
+     * When vaddr is at the beginning of a frame and start_vaddr is not page aligned
+     * we need to return the physical address of the frame where start_vaddr is and not
+     * the physical address of the previous frame (which can happen if we do 
+     * vaddr - start_vaddr without aligning to PAGE_FRAME). See schematic below.
+     * |    xxx|xxxxxx|xxx     |
+     *      lstart_vaddr lvaddr   => i=2 
+     */
+    unsigned long page_index = (vaddr - (pt->start_vaddr & PAGE_FRAME)) / PAGE_SIZE;
     if (pt->pages[page_index] == PT_UNPOPULATED_PAGE)
     {
         return PT_UNPOPULATED_PAGE;
@@ -85,7 +93,8 @@ void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)
     KASSERT(vaddr >= pt->start_vaddr);
     KASSERT(vaddr < (pt->start_vaddr) + (pt->size * PAGE_SIZE));
 
-    unsigned long page_index = (vaddr - (pt->start_vaddr)) / PAGE_SIZE;
+    /* See pt_get_entry() for more information */
+    unsigned long page_index = (vaddr - (pt->start_vaddr & PAGE_FRAME)) / PAGE_SIZE;
     KASSERT(pt->pages[page_index] == PT_UNPOPULATED_PAGE);
     pt->pages[page_index] = paddr;
 }

@@ -88,7 +88,9 @@ runprogram(char *progname)
 	}
 
 	/* Done with the file now. */
-	vfs_close(v);
+	/* TODO: Must be removed or file should be available to be opened when a vm_fault occurs */
+	/* TODO: Must be added when the process finishes only */
+	//vfs_close(v);
 
 	/* Define the user stack in the address space */
 	result = as_define_stack(as, &stackptr);

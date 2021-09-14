@@ -14,8 +14,10 @@ static void zero_a_region(paddr_t paddr, size_t n)
     static char zeros[16];
     size_t amt, i;
 
+    if (n == 0)
+        return;
+
     KASSERT(paddr != 0);
-    KASSERT(n != 0);
 
     i = 0;
     while (n > 0)
@@ -135,7 +137,7 @@ int seg_copy(struct prog_segment *old, struct prog_segment **ret)
     struct prog_segment *newps;
 
     KASSERT(old != NULL);
-    KASSERT(old -> pagetable != NULL);
+    KASSERT(old->pagetable != NULL);
 
     newps = seg_create();
     if (newps == NULL)
@@ -157,7 +159,7 @@ int seg_copy(struct prog_segment *old, struct prog_segment **ret)
     return 0;
 }
 
-static int load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
+int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
 {
     vaddr_t voffset, vbaseoffset;
     struct iovec iov;
@@ -167,6 +169,7 @@ static int load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
     struct addrspace *as;
 
     KASSERT(ps != NULL);
+    KASSERT(ps ->permissions != PAGE_STACK);
     KASSERT(ps->pagetable != NULL);
     KASSERT(ps->elf_vnode != NULL);
 
@@ -180,7 +183,6 @@ static int load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
 
     DEBUG(DB_EXEC, "segments.c: Loading 1 page to 0x%lx\n", (unsigned long)vaddr);
 
-    iov.iov_ubase = (userptr_t)vaddr;
     u.uio_iov = &iov;
     u.uio_iovcnt = 1;
     u.uio_segflg = ps->permissions == PAGE_EX ? UIO_USERISPACE : UIO_USERSPACE;
@@ -198,12 +200,14 @@ static int load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
 
     /* TODO: Explanation of code below */
 
-    page_index = (vaddr & PAGE_FRAME) / PAGE_SIZE;
-    vbaseoffset = ps->base_vaddr & (!PAGE_FRAME);
+    page_index = (vaddr - (ps->base_vaddr & PAGE_FRAME)) / PAGE_SIZE;
+    KASSERT(page_index < ps->n_pages);
+    vbaseoffset = ps->base_vaddr & ~(PAGE_FRAME);
     if (page_index == 0)
     {
         /* First page */
-        voffset = (size_t)(ps->base_vaddr) & (!PAGE_FRAME);
+        voffset = (size_t)(ps->base_vaddr) & ~(PAGE_FRAME);
+        iov.iov_ubase = (userptr_t)ps -> base_vaddr;
         iov.iov_len = PAGE_SIZE - voffset; /* Size in memory */
         u.uio_resid = PAGE_SIZE - voffset; /* amount to read from file */
         u.uio_offset = ps->file_offset;    /* Offset in file */
@@ -213,14 +217,16 @@ static int load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
     {
         /* Last page */
         voffset = (size_t)((ps->n_pages - 1) * PAGE_SIZE) - vbaseoffset;
+        iov.iov_ubase = (userptr_t)((ps -> base_vaddr) + voffset);
         iov.iov_len = ps->file_size - voffset;
         u.uio_resid = ps->file_size - voffset;
         u.uio_offset = ps->file_offset + (off_t)voffset;
-        zero_a_region((paddr & PAGE_FRAME) + ps->file_size - voffset, PAGE_SIZE - ps->file_size - voffset);
+        zero_a_region((paddr & PAGE_FRAME) + (ps->file_size - voffset), PAGE_SIZE - (ps->file_size - voffset));
     }
     else
     {
         /* Middle page */
+        iov.iov_ubase = (userptr_t)(vaddr & PAGE_FRAME);
         iov.iov_len = PAGE_SIZE;
         u.uio_resid = PAGE_SIZE;
         u.uio_offset = ps->file_offset + (off_t)((page_index * PAGE_SIZE) - vbaseoffset);
@@ -254,19 +260,15 @@ paddr_t seg_get_paddr(struct prog_segment *ps, vaddr_t vaddr)
 
     /* Get physical address from page table */
     paddr = pt_get_entry(ps->pagetable, vaddr);
-    if (paddr == PT_UNPOPULATED_PAGE)
-    {
-        /* 
-         * The page must be loaded from DISK and evict another 
-         * if there is not enough space (manged by coremap) 
-         */
-        paddr = alloc_upage(vaddr);
-        pt_add_entry(ps->pagetable, vaddr, paddr);
-        load_page(ps, vaddr, paddr);
-
-        /* TODO: azzerare se file<mem */
-    }
     return paddr;
+}
+
+void seg_add_pt_entry(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr) {
+    KASSERT(ps != NULL);
+    KASSERT(ps -> pagetable != NULL);
+    KASSERT(paddr != 0);
+
+    pt_add_entry(ps->pagetable, vaddr, paddr);
 }
 
 void seg_destroy(struct prog_segment *ps)

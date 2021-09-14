@@ -22,3 +22,7 @@ justdebug:
 	gnome-terminal -- sys161 -w kernel-SUCHVM && \
 	sleep 0.5 && \
 	ddd --debugger mips-harvard-os161-gdb kernel-SUCHVM
+
+run:
+	cd root && \
+	sys161 kernel-SUCHVM

@@ -21,7 +21,8 @@ static unsigned int current_victim;
 /* Implements the round robin policy and returns the index
  * of the next exntry to be replace in the TLB
  */
-static unsigned int tlb_get_rr_victim(void) {
+static unsigned int tlb_get_rr_victim(void)
+{
     unsigned int victim;
     victim = current_victim;
     current_victim = (current_victim + 1) % NUM_TLB;
@@ -68,6 +69,9 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
     struct prog_segment *ps;
 
     /* Align virtual address to page beginning virtual address */
+    /* TODO: In page_load serve il vero virtual address con l'offset
+     *       e non senza. Quindi non va messo:
+     */
     faultaddress &= PAGE_FRAME;
 
     DEBUG(DB_VM, "suchvm: fault: 0x%x\n", faultaddress);
@@ -80,7 +84,8 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
         return EINVAL;
     }
 
-    if (faulttype == VM_FAULT_READONLY) {
+    if (faulttype == VM_FAULT_READONLY)
+    {
         /* TODO: Must terminate the running process, EACCES is ok? */
         return EACCES;
     }
@@ -147,28 +152,42 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 
     /* 
      * Get the physical address of the received virtual address
-     * It also performs loading from disk and swapping if necessary
+     * It also loads the page from disk if it was not in the page table
+     * and if it is not in a stack segment.
      */
     paddr = seg_get_paddr(ps, faultaddress);
-    /* TODO: Zero the region if filesize < memsize */
+
+    if (paddr == PT_UNPOPULATED_PAGE)
+    {
+        /* 
+         * Alloc one page in coremap and add to page table
+         */
+        paddr = alloc_upage(faultaddress);
+        seg_add_pt_entry(ps, faultaddress, paddr);
+    }
 
     /* make sure it's page-aligned */
-	KASSERT((paddr & PAGE_FRAME) == paddr);
+    KASSERT((paddr & PAGE_FRAME) == paddr);
 
     /* TLB MANAGEMENT */
     /* Disable interrupts on this CPU while frobbing the TLB. */
-	spl = splhigh();
+    spl = splhigh();
 
-    tlb_index = tlb_get_rr_victim();
     entry_hi = faultaddress;
     entry_lo = paddr | TLBLO_VALID;
     /* If writes are permitted set the DIRTY bit (see tlb.h) */
-    if (ps -> permissions == PAGE_RW) {
+    if (ps->permissions == PAGE_RW)
+    {
         entry_lo = entry_lo | TLBLO_DIRTY;
     }
     DEBUG(DB_VM, "suchvm: 0x%x -> 0x%x\n", faultaddress, paddr);
+    tlb_index = tlb_get_rr_victim();
     tlb_write(entry_hi, entry_lo, tlb_index);
     splx(spl);
+
+    /* Load page from file */
+    if (ps->permissions != PAGE_STACK)
+        seg_load_page(ps, faultaddress, paddr);
 
     return 0;
 }

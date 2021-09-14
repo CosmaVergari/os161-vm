@@ -179,3 +179,17 @@ Nota: free list al posto di tenere un array di pagine libere ed occupate nella c
 
 - TODO: Rimandiamo caricare la prima pagina dell'entrypoint a dopo
 - TODO: Implementare la syscall exit per fare la destroy dell'address space del processo.
+
+- Address error on load?? quando chiama VOP_READ dopo aver allocato una pagina
+Definizione su os161 harvard sito: ADEL -- address error on load. An address error is either an unaligned access or an attempt to access kernel memory while in user mode. Software should respond by treating the condition as a failure. 
+- Siccome l'indirizzo virtuale è nel segmento user (<0x80000000), allora il problema è un accesso non allineato
+
+- NOTA: vfs_close in runprogram va tolto
+
+- Problema: viene fatto un page fault su un indirizzo virtuale che è appena fuori dall'indirizzo max di un segmento (e.g. 0xa0 su un max di 0x9f) e vm_fault ritorna un EFAULT. Non dovrebbe proprio fare questo accesso giusto?
+
+Updates 14/9 (Cosma):
+- seg_get_paddr non si può separare da load_page perchè load_page va chiamata solo quando la pagina non è popolata nella pagetable
+- il setup di iov_ubase in load_page va differenziato nei tre casi
+- La copia della pagina dal buffer in kernel nella pagina dell'utente non va a buon fine (viene chiamata copyfail() definita in copyinout.c)
+
