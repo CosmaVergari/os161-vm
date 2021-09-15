@@ -9,36 +9,16 @@
 #include <segments.h>
 
 /*
+ * Zero a physical memory region
+ */
 static void zero_a_region(paddr_t paddr, size_t n)
 {
-    //static, so initialized as zero
-    static char zeros[16];
-    size_t amt, i;
-
-    if (n == 0)
-        return;
-
-    KASSERT(paddr != 0);
-
-    i = 0;
-    while (n > 0)
-    {
-        amt = sizeof(zeros);
-        if (amt > n)
-        {
-            amt = n;
-        }
-        memcpy((void *)PADDR_TO_KVADDR(paddr + (i * sizeof(zeros<))), (void *)zeros, amt);
-        n -= amt;
-        i++;
-    }
-}
-*/
-static void zero_a_region(paddr_t paddr, size_t n)
-{
-    bzero((void *) PADDR_TO_KVADDR(paddr), n);
+    bzero((void *)PADDR_TO_KVADDR(paddr), n);
 }
 
+/*
+ * Alloc the prog_segment structure and initialize its fields
+ */
 struct prog_segment *seg_create(void)
 {
     struct prog_segment *seg = kmalloc(sizeof(struct prog_segment));
@@ -58,6 +38,11 @@ struct prog_segment *seg_create(void)
     return seg;
 }
 
+/*
+ * It is called by load_elf for each segment that is declared in the ELF headers.
+ * For each of them save the parameters that will be useful to alloc a page table
+ * and to solve a vm_fault properly.
+ */
 int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, off_t file_offset,
                size_t n_pages, struct vnode *v, char read, char write, char execute)
 {
@@ -138,6 +123,9 @@ int seg_prepare(struct prog_segment *ps)
     return 0;
 }
 
+/*
+ * Copy the prog_segment structure and its content into a new one.
+ */
 int seg_copy(struct prog_segment *old, struct prog_segment **ret)
 {
     struct prog_segment *newps;
@@ -165,21 +153,26 @@ int seg_copy(struct prog_segment *old, struct prog_segment **ret)
     return 0;
 }
 
+/*
+ * Loads a single page into the segment from file, it is called by vm_fault
+ * whenever the page table entry corresponding to vaddr is still empty and it
+ * must be loaded from file.
+ */
 int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
 {
-    vaddr_t voffset, vbaseoffset;
+    vaddr_t vbaseoffset, voffset;
+    paddr_t dest_paddr;
+    size_t read_len;
+    off_t file_offset;
     struct iovec iov;
     struct uio u;
     int result;
     unsigned long page_index;
-    struct addrspace *as;
 
     KASSERT(ps != NULL);
-    KASSERT(ps ->permissions != PAGE_STACK);
+    KASSERT(ps->permissions != PAGE_STACK);
     KASSERT(ps->pagetable != NULL);
     KASSERT(ps->elf_vnode != NULL);
-
-    as = proc_getas();
 
     if (ps->file_size > (ps->n_pages) * PAGE_SIZE)
     {
@@ -189,55 +182,91 @@ int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
 
     DEBUG(DB_EXEC, "segments.c: Loading 1 page to 0x%lx\n", (unsigned long)vaddr);
 
-    u.uio_iov = &iov;
-    u.uio_iovcnt = 1;
-    u.uio_segflg = ps->permissions == PAGE_EX ? UIO_USERISPACE : UIO_USERSPACE;
-    u.uio_rw = UIO_READ;
-    u.uio_space = as;
-
-    //|    XXXX|xxxxxx|XXXX    |
-    //     | lvaddr      lvaddr2
-    //|    base_vaddr
-    //|
-
-    //|    YYYY|xxxxxx|XXXX     |
-    //|           lvaddr
-    //|        |
-
-    /* TODO: Explanation of code below */
-
     page_index = (vaddr - (ps->base_vaddr & PAGE_FRAME)) / PAGE_SIZE;
     KASSERT(page_index < ps->n_pages);
     vbaseoffset = ps->base_vaddr & ~(PAGE_FRAME);
     if (page_index == 0)
     {
         /* First page */
-        voffset = (size_t)(ps->base_vaddr) & ~(PAGE_FRAME);
-        iov.iov_ubase = (userptr_t)ps -> base_vaddr;
-        iov.iov_len = PAGE_SIZE - voffset; /* Size in memory */
-        u.uio_resid = PAGE_SIZE - voffset; /* amount to read from file */
-        u.uio_offset = ps->file_offset;    /* Offset in file */
-        zero_a_region(paddr & PAGE_FRAME, voffset);
+        /*
+         * Let's imagine the situation below where fault vaddr is in the first page.
+         * "x"s represent the declared virtual address space of the program.
+         * Above the "x"s we have physical addresses
+         * Below we have virtual addresses
+         * 
+         *   paddr       (paddr+vbaseoffset)->LOAD HERE!
+         *   v           v
+         *   |00000000000xxxx|xxxxxxxxxxxxxxx|xxxxx0000000000|
+         *               | ^vaddr                              => page_index = 0
+         *   |<--------->^(ps->base_vaddr)
+         *        ^vbaseoffset
+         * 
+         * Since we know the paddr that has been assigned to that page, we can
+         * compute where to load in the memory. We do this by summing the beginning
+         * address of the frame (paddr) to the offset of the first virtual address 
+         * of this segment with respect to the virtual address of the beginning 
+         * of the page (vbaseoffset). Another way to see vbaseoffset is as the
+         * value that base_vaddr would assume if the beginning of the page was at 0.
+         * 
+         *   |00000000000xxxx|xxxxxxxxxxxxxxx|xxxxx0000000000|
+         *   0           | ^vaddr                              => page_index = 0
+         *   |           ^(ps->base_vaddr) == vbaseoffset
+         * 
+         * The memory surrounding the virtual address space should be zeroed so
+         * in the case of the first page we zero from the beginning of the frame
+         * to the beginning of the actual content of the page, so of a length of
+         * vbaseoffset.
+         */
+        dest_paddr = paddr + vbaseoffset;
+        read_len = PAGE_SIZE - vbaseoffset;
+        file_offset = ps->file_offset;
+        zero_a_region(paddr & PAGE_FRAME, vbaseoffset);
     }
     else if (page_index == (ps->n_pages) - 1)
     {
         /* Last page */
-        voffset = (size_t)((ps->n_pages - 1) * PAGE_SIZE) - vbaseoffset;
-        iov.iov_ubase = (userptr_t)((ps -> base_vaddr) + voffset);
-        iov.iov_len = ps->file_size - voffset;
-        u.uio_resid = ps->file_size - voffset;
-        u.uio_offset = ps->file_offset + (off_t)voffset;
+        /* For the approach taken see the first page case above. The memory situation 
+         * we suppose here is the following:
+         *
+         *   paddr                           (paddr+vbaseoffset+voffset)->LOAD HERE!
+         *   v                               v
+         *   |00000000000xxxx|xxxxxxxxxxxxxxx|xxxxx0000000000|
+         *               |                      ^vaddr          => page_index = ps->n_pages-1
+         *   |<--------->^(ps->base_vaddr)
+         *        ^vbaseoffset               
+         *   |           <------------------>|
+         *                      ^voffset
+         */
+        voffset = (ps->n_pages - 1) * PAGE_SIZE - vbaseoffset;
+        dest_paddr = paddr + vbaseoffset + voffset;
+        read_len = ps->file_size - voffset;
+        file_offset = ps->file_offset + voffset;
         zero_a_region((paddr & PAGE_FRAME) + (ps->file_size - voffset), PAGE_SIZE - (ps->file_size - voffset));
     }
     else
     {
         /* Middle page */
-        iov.iov_ubase = (userptr_t)(vaddr & PAGE_FRAME);
-        iov.iov_len = PAGE_SIZE;
-        u.uio_resid = PAGE_SIZE;
-        u.uio_offset = ps->file_offset + (off_t)((page_index * PAGE_SIZE) - vbaseoffset);
+        /* For the approach taken see the first page case above. The memory situation 
+         * we suppose here is the following:
+         *
+         *   paddr           (paddr + (PAGE_SIZE * page_index))->LOAD HERE!
+         *   v               v
+         *   |00000000000xxxx|xxxxxxxxxxxxxxx|xxxxx0000000000|
+         *                          ^vaddr                     => page_index = ps->n_pages-1
+         * 
+         */
+        dest_paddr = paddr + (PAGE_SIZE * page_index);
+        read_len = PAGE_SIZE;
+        file_offset = ps->file_offset + (page_index * PAGE_SIZE) - vbaseoffset;
     }
 
+    /* Sanity check on read parameters */
+    KASSERT((dest_paddr - paddr) / PAGE_SIZE < ps->n_pages);
+    KASSERT(read_len <= PAGE_SIZE);
+    KASSERT(file_offset - ps->file_offset < ps->file_size);
+
+    /* Treat the page as a physical address inside kernel address space and perform a read */
+    uio_kinit(&iov, &u, (void *)PADDR_TO_KVADDR(dest_paddr), read_len, file_offset, UIO_READ);
     result = VOP_READ(ps->elf_vnode, &u);
     if (result)
     {
@@ -253,6 +282,12 @@ int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
     return 0;
 }
 
+/*
+ * Try to perform the logical->physical conversion by looking up
+ * the page table for the specified segment.
+ * Returns the physical address on a successful lookup,
+ * PT_UNPOPULATED_PAGE otherwise.
+ */
 paddr_t seg_get_paddr(struct prog_segment *ps, vaddr_t vaddr)
 {
     paddr_t paddr;
@@ -269,21 +304,29 @@ paddr_t seg_get_paddr(struct prog_segment *ps, vaddr_t vaddr)
     return paddr;
 }
 
-void seg_add_pt_entry(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr) {
+/*
+ * Add an entry to the page table containing a virtual->physical conversion.
+ * It should be called right after a page has been reserved in memory.
+ */
+void seg_add_pt_entry(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
+{
     KASSERT(ps != NULL);
-    KASSERT(ps -> pagetable != NULL);
+    KASSERT(ps->pagetable != NULL);
     KASSERT(paddr != 0);
 
     pt_add_entry(ps->pagetable, vaddr, paddr);
 }
 
+/*
+ * Destroy the segment and its contents
+ */
 void seg_destroy(struct prog_segment *ps)
 {
     KASSERT(ps != NULL);
 
     if (ps->pagetable != NULL)
     {
-        kfree(ps->pagetable);
+        pt_free(ps->pagetable);
     }
 
     kfree(ps);

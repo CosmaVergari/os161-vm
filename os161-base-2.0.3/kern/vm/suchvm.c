@@ -162,6 +162,10 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
          */
         paddr = alloc_upage(faultaddress);
         seg_add_pt_entry(ps, faultaddress, paddr);
+        if (ps->permissions == PAGE_STACK)
+        {
+            bzero((void *)PADDR_TO_KVADDR(paddr), PAGE_SIZE);
+        }
         unpopulated = 1;
     }
 
