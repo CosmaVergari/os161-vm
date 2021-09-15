@@ -193,3 +193,22 @@ Updates 14/9 (Cosma):
 - il setup di iov_ubase in load_page va differenziato nei tre casi
 - La copia della pagina dal buffer in kernel nella pagina dell'utente non va a buon fine (viene chiamata copyfail() definita in copyinout.c)
 
+# 14/9/2021
+TLB flow:
+Quando sta caricando la prima pagina)
+1. TLB miss sull'entrypoint
+2. Page table miss in vm_fault()
+3. Avvia il caricamento della pagina da file con emufs_doread()
+4. Il thread viene deschedulato finchè non ha letto la pagina da file
+5. thread_switch() viene chiamato al ritorno in esecuzione
+6. thread_switch() chiama as_activate()
+7. as_Activate() svuota la TLB
+8. uiomove() per copiare la pagina dal kernel buffer all'indirizzo user level (non funziona per ora) causa un'altra TLB miss
+9. TLB miss viene risolta leggendo la page table, quindi senza caricare da file, quindi senza chiamare as_activate, quindi senza svuotare la TLB
+fine
+
+La TLB quando memcpy copia in memoria quella che emufs_doread() ha letto in un kernel buffer da file, causa una TLB miss in un'area di memoria che è readonly, quindi la TLB si incazza e blocca la copia.
+- Soluzione: Fare degli stati in cui la vm tenga traccia di quale miss stiamo (orribile), far fare la write anche in una pagina Read only se è il kernel a farla
+Soluzioni?
+- Mettere temporaneamente il RW in quella pagina finchè non la carica: far impostare la tlb alla funzione che carica la pagina (ma come?)
+- Caricare la pagina prima nel kernel e poi fare una memmove nell'indirizzo fisico che è già noto.

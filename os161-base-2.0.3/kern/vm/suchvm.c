@@ -61,7 +61,7 @@ void vm_bootstrap(void)
 int vm_fault(int faulttype, vaddr_t faultaddress)
 {
     unsigned int tlb_index;
-    int spl;
+    int spl, result;
     char unpopulated;
     vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
     paddr_t paddr;
@@ -70,9 +70,6 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
     struct prog_segment *ps;
 
     /* Align virtual address to page beginning virtual address */
-    /* TODO: In page_load serve il vero virtual address con l'offset
-     *       e non senza. Quindi non va messo:
-     */
     faultaddress &= PAGE_FRAME;
 
     DEBUG(DB_VM, "suchvm: fault: 0x%x\n", faultaddress);
@@ -171,30 +168,29 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
     /* make sure it's page-aligned */
     KASSERT((paddr & PAGE_FRAME) == paddr);
 
-    /* TLB MANAGEMENT */
+    tlb_index = tlb_get_rr_victim();
+
+    if (faulttype == VM_FAULT_READ && ps->permissions != PAGE_STACK && unpopulated)
+    {
+        /* Load page from file*/
+        result = seg_load_page(ps, faultaddress, paddr);
+        if (result)
+            return EFAULT;
+    }
+
     /* Disable interrupts on this CPU while frobbing the TLB. */
     spl = splhigh();
 
     entry_hi = faultaddress;
     entry_lo = paddr | TLBLO_VALID;
     /* If writes are permitted set the DIRTY bit (see tlb.h) */
-    if (ps->permissions == PAGE_RW)
+    if (ps->permissions == PAGE_RW || ps->permissions == PAGE_STACK)
     {
         entry_lo = entry_lo | TLBLO_DIRTY;
     }
     DEBUG(DB_VM, "suchvm: 0x%x -> 0x%x\n", faultaddress, paddr);
-    tlb_index = tlb_get_rr_victim();
     tlb_write(entry_hi, entry_lo, tlb_index);
     splx(spl);
-
-    /* Load page from file if it was not populated before */
-    if (ps->permissions != PAGE_STACK && unpopulated)
-    {
-        if (!seg_load_page(ps, faultaddress, paddr))
-        {
-            return EFAULT;
-        }
-    }
 
     return 0;
 }
