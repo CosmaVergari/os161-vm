@@ -30,6 +30,7 @@
 #include <types.h>
 #include <kern/errno.h>
 #include <lib.h>
+#include <vfs.h>
 #include <addrspace.h>
 #include <vm.h>
 #include <proc.h>
@@ -103,14 +104,22 @@ int as_copy(struct addrspace *old, struct addrspace **ret)
 
 void as_destroy(struct addrspace *as)
 {
-	/* TODO
+	/*
 	 * Clean up as needed.
 	 */
-	KASSERT(as != NULL);
+	struct vnode *v;
 
+	KASSERT(as != NULL);
+	KASSERT(as->seg1->elf_vnode != NULL);
+	KASSERT(as->seg1 != NULL);
+	KASSERT(as->seg2 != NULL);
+	KASSERT(as->seg_stack != NULL);
+
+	v = as->seg1->elf_vnode;
 	seg_destroy(as->seg1);
 	seg_destroy(as->seg2);
 	seg_destroy(as->seg_stack);
+	vfs_close(v);
 
 	kfree(as);
 }

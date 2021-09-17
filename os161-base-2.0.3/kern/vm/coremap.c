@@ -176,6 +176,8 @@ static int freeppages(paddr_t addr, unsigned long npages)
 	for (i = first; i < first + np; i++)
 	{
 		coremap[i].entry_type = COREMAP_FREED;
+		coremap[i].vaddr = 0;
+		coremap[i].as = NULL;
 	}
 	coremap[first].allocSize = 0;
 	spinlock_release(&coremap_lock);
@@ -261,4 +263,14 @@ paddr_t alloc_upage(vaddr_t vaddr) {
 	pa = getppage_user(vaddr);
 	
 	return pa;
+}
+
+void free_upage(paddr_t paddr) {
+	if (isCoremapActive())
+	{
+		long index = paddr / PAGE_SIZE;
+		KASSERT(nRamFrames > index);
+		KASSERT(coremap[index].allocSize == 1);
+		freeppages(paddr, 1);
+	}
 }

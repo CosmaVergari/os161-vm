@@ -2,6 +2,7 @@
 #include <kern/errno.h>
 #include <lib.h>
 #include <pt.h>
+#include <coremap.h>
 #include <vm.h>
 
 struct pagetable *pt_create(unsigned long size_in_pages, vaddr_t start_address)
@@ -101,9 +102,27 @@ void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)
 
 void pt_free(struct pagetable *pt)
 {
+    unsigned long i;
+
+    KASSERT(pt != NULL);
+    KASSERT(pt->pages != NULL);
+    KASSERT(pt->size != 0);
+
+    for (i = 0; i < pt->size; i++)
+    {
+        if (pt->pages[i] != PT_UNPOPULATED_PAGE)
+        {
+            free_upage(pt->pages[i]);
+        }
+    }
+
+    
+}
+
+void pt_destroy(struct pagetable *pt) {
     KASSERT(pt != NULL);
     KASSERT(pt->pages != NULL);
 
     kfree(pt->pages);
     kfree(pt);
-}
+} 

@@ -20,5 +20,6 @@ int pt_copy(struct pagetable *old, struct pagetable **ret);
 paddr_t pt_get_entry(struct pagetable *pt, vaddr_t vaddr);
 void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr);
 void pt_free(struct pagetable *pt);
+void pt_destroy(struct pagetable *pt);
 
 #endif /* PT_H */

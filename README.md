@@ -211,4 +211,9 @@ La TLB quando memcpy copia in memoria quella che emufs_doread() ha letto in un k
 - Soluzione: Fare degli stati in cui la vm tenga traccia di quale miss stiamo (orribile), far fare la write anche in una pagina Read only se è il kernel a farla
 Soluzioni?
 - Mettere temporaneamente il RW in quella pagina finchè non la carica: far impostare la tlb alla funzione che carica la pagina (ma come?)
-- Caricare la pagina prima nel kernel e poi fare una memmove nell'indirizzo fisico che è già noto.
+- Caricare la pagina prima nel kernel e poi fare una memmove nell'indirizzo fisico che è già noto. -> SOLUZIONE ADOTTATA!
+
+TODO: Implementare syscall exit e swapping
+TODO: Spostare riferimento elf node in as (opzionale)
+
+# 17/9/2021 Il paging funziona

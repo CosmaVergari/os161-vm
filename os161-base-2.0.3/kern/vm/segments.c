@@ -327,6 +327,7 @@ void seg_destroy(struct prog_segment *ps)
     if (ps->pagetable != NULL)
     {
         pt_free(ps->pagetable);
+        pt_destroy(ps->pagetable);
     }
 
     kfree(ps);

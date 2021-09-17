@@ -87,9 +87,10 @@ runprogram(char *progname)
 		return result;
 	}
 
-	/* Done with the file now. */
-	/* TODO: Must be removed or file should be available to be opened when a vm_fault occurs */
-	/* TODO: Must be added when the process finishes only */
+	/* 
+	 *	Not called here because we need the file reference for 
+	 *	on demand paging. 
+	 */
 	//vfs_close(v);
 
 	/* Define the user stack in the address space */
