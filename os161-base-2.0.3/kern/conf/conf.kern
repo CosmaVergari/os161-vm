@@ -455,3 +455,4 @@ optfile suchvm vm/pt.c
 optfile suchvm vm/segments.c
 optfile suchvm vm/suchvm.c
 optfile suchvm syscall/proc_syscalls.c
+optfile suchvm syscall/file_syscalls.c

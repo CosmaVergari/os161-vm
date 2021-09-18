@@ -19,19 +19,18 @@
  * typed for stdin,stdout and stderr defind in kern/unistd.h
  */
 
-int sys_read(int fd, userptr_t buf, size_t size){
+int sys_read(int fd, userptr_t buf, size_t size)
+{
 	char *b = (char *) buf;
 	int i;
-	if( fd!= STDIN_FILENO){
-/*#if OPT_FILE
-    	return file_read(fd, buf, size);
-#else*/
+	if( fd!= STDIN_FILENO)
+    {
     	kprintf("sys_read supported only to stdin\n");
     	return -1;
-//#endif
 	}
 
-	for ( i=0;i< (int)size ; i++ ){
+	for ( i=0;i< (int)size ; i++ )
+    {
 		b[i] = getch();
 		if (b[i] < 0)
 			return i;
@@ -40,16 +39,14 @@ int sys_read(int fd, userptr_t buf, size_t size){
 	return (int)size;
 }
 
-int sys_write(int fd, userptr_t buf, size_t size){
+int sys_write(int fd, userptr_t buf, size_t size)
+{
 	char *b = (char *)buf;
 
-	if( fd != STDOUT_FILENO  &&	 fd != STDERR_FILENO ){
-/*#if OPT_FILE
-    	return file_write(fd, buf, size);
-#else*/
+	if( fd != STDOUT_FILENO  &&	 fd != STDERR_FILENO )
+    {
     	kprintf("sys_read supported only to stdin\n");
     	return -1;
-//#endif
 	}
 
 	for (int i=0;i < (int)size;i++)
