@@ -228,8 +228,8 @@ int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
         /* For the approach taken see the first page case above. The memory situation 
          * we suppose here is the following:
          *
-         *   paddr                           (paddr+vbaseoffset+voffset)->LOAD HERE!
-         *   v                               v
+         *                                   paddr->LOAD HERE!
+         *                                   v
          *   |00000000000xxxx|xxxxxxxxxxxxxxx|xxxxx0000000000|
          *               |                      ^vaddr          => page_index = ps->n_pages-1
          *   |<--------->^(ps->base_vaddr)
@@ -238,7 +238,7 @@ int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
          *                      ^voffset
          */
         voffset = (ps->n_pages - 1) * PAGE_SIZE - vbaseoffset;
-        dest_paddr = paddr + vbaseoffset + voffset;
+        dest_paddr = paddr;
         read_len = ps->file_size - voffset;
         file_offset = ps->file_offset + voffset;
         zero_a_region((paddr & PAGE_FRAME) + (ps->file_size - voffset), PAGE_SIZE - (ps->file_size - voffset));
@@ -249,13 +249,15 @@ int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
         /* For the approach taken see the first page case above. The memory situation 
          * we suppose here is the following:
          *
-         *   paddr           (paddr + (PAGE_SIZE * page_index))->LOAD HERE!
-         *   v               v
+         *                   paddr->LOAD HERE!
+         *                   v
          *   |00000000000xxxx|xxxxxxxxxxxxxxx|xxxxx0000000000|
-         *                          ^vaddr                     => page_index = ps->n_pages-1
+         *               |          ^vaddr                     => page_index = ps->n_pages-1
+         *   |<--------->^(ps->base_vaddr)
+         *        ^vbaseoffset
          * 
          */
-        dest_paddr = paddr + (PAGE_SIZE * page_index);
+        dest_paddr = paddr;
         read_len = PAGE_SIZE;
         file_offset = ps->file_offset + (page_index * PAGE_SIZE) - vbaseoffset;
     }

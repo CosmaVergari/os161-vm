@@ -62,6 +62,8 @@ int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 
 #ifdef OPT_SUCHVM
 void sys__exit(int status);
+int sys_read(int fd, userptr_t buf, size_t size);
+int sys_write(int fd, userptr_t buf, size_t size);
 #endif
 
 #endif /* _SYSCALL_H_ */

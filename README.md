@@ -217,3 +217,8 @@ TODO: Implementare syscall exit e swapping
 TODO: Spostare riferimento elf node in as (opzionale)
 
 # 17/9/2021 Il paging funziona
+
+# 18/9 Il paging non funziona
+- La variabile palindrome nel file di test palin è lunga 8000 char ma nel programma sys_write viene chiamata solo con 4096 caratteri. Perchè?
+- Le chiamate alle printf dove c'è solo testo vengono tradotte in assembly come chiamate a *puts*, mentre quella con la variabile palindrome viene tradotta in *printf*. Quella con printf di palindrome è l'unica che funziona e le chiamate a sys_write causate da puts invece sono con lunghezza 0 o 1 a occhio. Il puntatore che riceve sys_write dovrebbe essere giusto, è solo sbagliata la lunghezza. Problema di passaggio parametri? -> RISOLTO (problema nella gestione degli indirizzi fisici in seg_load_page)
+
