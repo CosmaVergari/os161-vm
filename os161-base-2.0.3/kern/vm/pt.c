@@ -81,7 +81,7 @@ paddr_t pt_get_entry(struct pagetable *pt, vaddr_t vaddr)
     {
         return PT_UNPOPULATED_PAGE;
     }
-    else
+    else // TODO : check if it was swapped out, and do the swap in 
     {
         return pt->pages[page_index];
     }

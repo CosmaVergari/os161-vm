@@ -222,3 +222,83 @@ TODO: Spostare riferimento elf node in as (opzionale)
 - La variabile palindrome nel file di test palin è lunga 8000 char ma nel programma sys_write viene chiamata solo con 4096 caratteri. Perchè?
 - Le chiamate alle printf dove c'è solo testo vengono tradotte in assembly come chiamate a *puts*, mentre quella con la variabile palindrome viene tradotta in *printf*. Quella con printf di palindrome è l'unica che funziona e le chiamate a sys_write causate da puts invece sono con lunghezza 0 o 1 a occhio. Il puntatore che riceve sys_write dovrebbe essere giusto, è solo sbagliata la lunghezza. Problema di passaggio parametri? -> RISOLTO (problema nella gestione degli indirizzi fisici in seg_load_page)
 
+
+
+# 20/9 SWAPFILE
+
+Flow SWAP OUT 
+- vm_fault
+- si deve salavre il p_addr nella pagetable e scrivere la pagina in memoria...
+- nessun p_addr disponibile
+- serve lo swap out di una pagina 
+- viene ritornato il p_addr liberato 
+- la pagina che ci serviva viene salvata a quel p_addr
+- la pagina dello swap out viene salvata nello swapfile ma dovrebbe essere invalidata la entry nella pt per far
+    in modo che quando venga fatto lo swap in si sappia che quella entry è stata vittima dello swap out
+
+Flow SWAP IN 
+- la pagina richiesta ha già un p_addr salvato nella pagetable
+- nella entry della page_table corrispondente, si nota che la pagina è stata vittima di uno swap out
+- si carica la pagina in memoria dallo swap_file ( potrebbe avvenire un nuovo swap out se non ci sono abbastanza pagine)
+
+
+CONTESTO IN CUI AVVIENE LO SWAP OUT
+- Tutte le pagine sono state assegnate
+    - Il risultato della steal_mem è nessuna pagina libera  --> dopo aver provato con le pagine della coremap
+    - La coremap è al completo
+
+PROBLEMI 
+- La pagina che fa swap in deve essere ricaricata allo stesso p_addr in cui era prima dello swap_out?
+- Tutti gli as dovrebbero tener traccia dello swapfile
+    - Si tiene il puntatore al file aperto dentro il file swapfile.c?
+    - Si tiene il puntatore al file aperto dentro suchvm.c?
+    - Quando il file deve essere aperto? --> Suppongo quando venga attivata la coremap?
+    - Ogni volta lo swapfile va aperto e chiuso? 
+- Siccome potrebbe esserci un context switch serve che l'operazione di swap in - swap out sia  
+    - protetta da un lock 
+                -- o --
+    - disattivando gli interrupt  --> questa funzionerebbe su nostra implemetazione poichè è a singola cpu
+
+
+ROBA DA MODIFICARE per SWAP OUT
+- chiamata allo swap out in coremap.c in getppage_user
+- nel file swapfile.c funzione swap_out 
+    - identifica la pagine per lo swap_out  (possiamo utilizzare un round robin come nella tlb o anche fare swap out di una pagina random)
+    - utilizzando un file diverso per la vittima ci sono due soluzioni :
+        - Passare la coremap e identificare la vittima dentro la swap_out --> quindi ritornare il paddr
+        - Passare direttamente la vittima alla swap out ( più semplice) ( sotto forma di coremap entry)
+            - si dovrebbe tenere una variabile per il round robin come nella tlb
+            - la swap out si occuperebbe solo del salvataggio nella pagina vittima nel file
+            - in questo caso l'invalidazione della entry nella pt potrebbe essere fatta da :
+                - swapout --> visto che abbiamo la coremap entry --> dobbiamo ricavarci il segment e invalidare la relativa entry nella pt
+                - dentro coremap facendo la stessa operazione  ( forse la prima soluzione è più pulita)
+
+ROBA DA MODIFICARE per SWAP IN
+- nella pt servirebbe una flag per indicare che la relativa pagina è stata vittima di uno swap out
+- si chiama la funzione swap in a cui si passa il vaddr
+    - la chiamata può avvenire in diversi punti:
+        - in pt.c nella funzione pt_get_entry in cui si fa un controllo se c'è stato lo swap_out
+        - in suchvm.c  nella funzione vm_fault in cui si controlla se la pagina è stata vittima di swap out precedentemente grazie al flag impostato
+- la funzione swap in deve ricaricare la pagina in memoria 
+    -( dovrebbe riusare le funzioni per la ricerca di spazio in memoria e quindi potrebbe riavvenire uno swap out)
+- quando si ritorna la entry nella pt dovrebbe essere di nuovo valida
+- la entry nello swapfile soggetta a swap in
+    - viene eliminata dallo swap file ???
+    - viene tenuta ma invalidata ed in caso di swap out si controllano tutte le entry invalidate ???
+
+
+
+CONTESTO IN CUI AVVIENE LO SWAP PT.2
+- spazio della memoria virtuale di un singolo processo più grande dello spazio fisico 
+- dopo context switch lo spazio virtuale di un secondo processo è più grande dello spazio fisico disponibile
+
+- Ora è necessario che lo swap out venga fatto con pagine dello stesso processo o vanno bene anche le pagine di altri processi? 
+    - Nel primo caso siamo sempre nello stesso as 
+    - Nel secondo l'as viene ricavato dalla coremap entry
+
+
+DUBBI DALLA TRACCIA 
+- E' riportato This file will be limited to 9 MB (i.e., 9 * 1024 * 1024 bytes).
+    - Ma ogni pagina non ha dimensione 4096 ???
+    - Dobbiamo salvare solo la coremap entry ???
+        - in questo caso se si trova il vaddr che si cercava per vedere se è giusto fare swap in si controlla che appartenga all'as corretto 
