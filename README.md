@@ -222,13 +222,11 @@ TODO: Spostare riferimento elf node in as (opzionale)
 - La variabile palindrome nel file di test palin è lunga 8000 char ma nel programma sys_write viene chiamata solo con 4096 caratteri. Perchè?
 - Le chiamate alle printf dove c'è solo testo vengono tradotte in assembly come chiamate a *puts*, mentre quella con la variabile palindrome viene tradotta in *printf*. Quella con printf di palindrome è l'unica che funziona e le chiamate a sys_write causate da puts invece sono con lunghezza 0 o 1 a occhio. Il puntatore che riceve sys_write dovrebbe essere giusto, è solo sbagliata la lunghezza. Problema di passaggio parametri? -> RISOLTO (problema nella gestione degli indirizzi fisici in seg_load_page)
 
-<<<<<<< HEAD
 # 19/9
 - Nel programma palin, viene stampata solo la prima pagina (4096 caratteri) della variabile palindrome e il test della palindromia infatti fallisce.
 - Dobbiamo caricare tutte le pagine dei segmenti data? Mi sembra strano.
 
 Problema: La prima volta che c'è una vm_fault in seg2 è sulla 2° pagina del segmento. La 1° pagina di seg2 contiene i primi 4096 byte della variabile palindrome. I restanti byte della variabile sono nella 2° pagina di seg2 che quindi dovrebbe essere caricata. Il fatto è che questa vm_fault è di tipo write, quindi per come è scritta ora la vm_fault non esegue la seg_load_page() e quindi non carica mai la pagina da file!!! (quindi strlen ritorna 4096, quindi stampa solo i primi 4096 bytes)
-=======
 
 
 # 20/9 SWAPFILE
@@ -309,4 +307,3 @@ DUBBI DALLA TRACCIA
     - Ma ogni pagina non ha dimensione 4096 ??? (*Nota Cosma: Sisi, non penso c'entri molto quello che dice nella dimensione*)
     - Dobbiamo salvare solo la coremap entry ???
         - in questo caso se si trova il vaddr che si cercava per vedere se è giusto fare swap in si controlla che appartenga all'as corretto (*Nota Cosma: Secondo me sì*)
->>>>>>> 734c0288cd08395790c72f70454525692cf015f4
