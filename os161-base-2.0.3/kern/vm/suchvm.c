@@ -9,6 +9,7 @@
 #include <suchvm.h>
 #include <coremap.h>
 #include <segments.h>
+#include <swapfile.h>
 
 /* This index is used to perform round-robin entry replacement
  * in the TLB. It is not reset in the as_activate function because
@@ -48,6 +49,7 @@ void suchvm_can_sleep(void)
 void vm_bootstrap(void)
 {
     coremap_init();
+    swap_init();
     current_victim = 0;
 }
 

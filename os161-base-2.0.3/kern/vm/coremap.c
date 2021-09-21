@@ -7,6 +7,7 @@
 #include <addrspace.h>
 #include <suchvm.h>
 #include <coremap.h>
+#include <swapfile.h>
 
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
@@ -255,6 +256,7 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 			/* TODO: Nella condizione per trovare una pagina vittima controllare per 
 		         entry_type che sia COREMAP_BUSY_USER */
 			
+			//swap_out()
 		}
 	}
 
