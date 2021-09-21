@@ -169,6 +169,8 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
         unpopulated = 1;
     }
 
+    // TODO : here could be  a check for SWAP_OUT_PAGE and call the swapin function
+
     /* make sure it's page-aligned */
     KASSERT((paddr & PAGE_FRAME) == paddr);
 
