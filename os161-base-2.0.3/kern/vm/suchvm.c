@@ -174,7 +174,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 
     tlb_index = tlb_get_rr_victim();
 
-    if (faulttype == VM_FAULT_READ && ps->permissions != PAGE_STACK && unpopulated)
+    if (ps->permissions != PAGE_STACK && unpopulated)
     {
         /* Load page from file*/
         result = seg_load_page(ps, faultaddress, paddr);
