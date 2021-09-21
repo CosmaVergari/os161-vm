@@ -307,3 +307,6 @@ DUBBI DALLA TRACCIA
     - Ma ogni pagina non ha dimensione 4096 ??? (*Nota Cosma: Sisi, non penso c'entri molto quello che dice nella dimensione*)
     - Dobbiamo salvare solo la coremap entry ???
         - in questo caso se si trova il vaddr che si cercava per vedere se è giusto fare swap in si controlla che appartenga all'as corretto (*Nota Cosma: Secondo me sì*)
+
+
+Idea: implementare memory mapping di un file e utilizzare vop_mmap per mappare lo swap file in memoria

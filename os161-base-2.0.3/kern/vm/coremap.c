@@ -250,7 +250,12 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 			coremap[page_i].vaddr = associated_vaddr;
 			spinlock_release(&coremap_lock);
 		}
-		/* TODO: If returned addr is 0 (exhausted ram space) we need to swap */
+		else {
+			/* TODO: If returned addr is 0 (exhausted ram space) we need to swap */
+			/* TODO: Nella condizione per trovare una pagina vittima controllare per 
+		         entry_type che sia COREMAP_BUSY_USER */
+			
+		}
 	}
 
 	return addr;
