@@ -8,6 +8,7 @@
 #include <suchvm.h>
 #include <coremap.h>
 #include <swapfile.h>
+#include <allocqueue.h>
 
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
@@ -15,8 +16,10 @@ static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 static struct spinlock coremap_lock = SPINLOCK_INITIALIZER;
 static struct coremap_entry *coremap = NULL;
 static int nRamFrames = 0;
-
 static int coremapActive = 0;
+
+static struct spinlock allocqueue_lock = SPINLOCK_INITIALIZER;
+static struct allocqueue *allocqueue_user = NULL;
 
 static int isCoremapActive()
 {
@@ -50,6 +53,8 @@ void coremap_init(void)
 		coremap[i].as = NULL;
 		coremap[i].allocSize = 0;
 	}
+
+	allocqueue_user = allocqueue_init();
 
 	spinlock_acquire(&coremap_lock);
 	coremapActive = 1;
@@ -250,6 +255,9 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 			coremap[page_i].as = as;
 			coremap[page_i].vaddr = associated_vaddr;
 			spinlock_release(&coremap_lock);
+			spinlock_acquire(&allocqueue_lock);
+			allocqueue_enqueue(allocqueue_user, &coremap[page_i]);
+			spinlock_release(&allocqueue_lock);
 		}
 		else {
 			/* TODO: If returned addr is 0 (exhausted ram space) we need to swap */
@@ -279,5 +287,9 @@ void free_upage(paddr_t paddr) {
 		KASSERT(nRamFrames > index);
 		KASSERT(coremap[index].allocSize == 1);
 		freeppages(paddr, 1);
+		
+		spinlock_acquire(&allocqueue_lock);
+		allocqueue_rementry(allocqueue_user, &coremap[index]);
+		spinlock_release(&allocqueue_lock);
 	}
 }
