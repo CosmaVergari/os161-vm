@@ -8,8 +8,6 @@
 #include <suchvm.h>
 #include <coremap.h>
 #include <swapfile.h>
-#include <allocqueue.h>
-
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
@@ -18,8 +16,10 @@ static struct coremap_entry *coremap = NULL;
 static int nRamFrames = 0;
 static int coremapActive = 0;
 
-static struct spinlock allocqueue_lock = SPINLOCK_INITIALIZER;
-static struct allocqueue *allocqueue_user = NULL;
+static struct spinlock victim_lock = SPINLOCK_INITIALIZER;
+static unsigned long const_invalid_reference = 0;
+static unsigned long victim = 0;
+static unsigned long last_alloc = 0;
 
 static int isCoremapActive()
 {
@@ -52,9 +52,13 @@ void coremap_init(void)
 		coremap[i].vaddr = 0;
 		coremap[i].as = NULL;
 		coremap[i].allocSize = 0;
+		coremap[i].next_allocated = const_invalid_reference;
+		coremap[i].prev_allocated = const_invalid_reference;
 	}
 
-	allocqueue_user = allocqueue_init();
+	const_invalid_reference = nRamFrames;
+	last_alloc = const_invalid_reference;
+	victim = const_invalid_reference;
 
 	spinlock_acquire(&coremap_lock);
 	coremapActive = 1;
@@ -226,6 +230,7 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 {
 	struct addrspace *as;
 	paddr_t addr;
+	unsigned long last_temp, victim_temp;
 
 	as = proc_getas();
 	KASSERT(as != NULL); /* get_a_page shouldn't be called before VM is initialized */
@@ -248,22 +253,44 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 	{
 		if (addr != 0)
 		{
+			spinlock_acquire(&victim_lock);
+			last_temp = last_alloc;
+			victim_temp = victim;
+			spinlock_release(&victim_lock);
+
 			spinlock_acquire(&coremap_lock);
 			int page_i = (addr / PAGE_SIZE);
 			coremap[page_i].entry_type = COREMAP_BUSY_USER;
 			coremap[page_i].allocSize = 1;
 			coremap[page_i].as = as;
 			coremap[page_i].vaddr = associated_vaddr;
+
+			if (last_temp != const_invalid_reference)
+			{
+				// Means that a page has been already allocated and last_temp is valid
+				coremap[last_temp].next_allocated = page_i;
+				coremap[page_i].prev_allocated = last_temp;
+				coremap[page_i].next_allocated = const_invalid_reference;
+			}
+			else
+			{
+				coremap[page_i].prev_allocated = const_invalid_reference;
+				coremap[page_i].next_allocated = const_invalid_reference;
+			}
 			spinlock_release(&coremap_lock);
-			spinlock_acquire(&allocqueue_lock);
-			allocqueue_enqueue(allocqueue_user, &coremap[page_i]);
-			spinlock_release(&allocqueue_lock);
+
+			spinlock_acquire(&victim_lock);
+			if (victim_temp == const_invalid_reference)
+				victim = page_i;
+			last_alloc = page_i;
+			spinlock_release(&victim_lock);
 		}
-		else {
+		else
+		{
 			/* TODO: If returned addr is 0 (exhausted ram space) we need to swap */
 			/* TODO: Nella condizione per trovare una pagina vittima controllare per 
 		         entry_type che sia COREMAP_BUSY_USER */
-			
+
 			//swap_out()
 		}
 	}
@@ -271,25 +298,70 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 	return addr;
 }
 
-paddr_t alloc_upage(vaddr_t vaddr) {
+static void freeppage_user(paddr_t paddr)
+{
+	unsigned long last_new, victim_new;
+
+	if (isCoremapActive())
+	{
+		unsigned long page_i = paddr / PAGE_SIZE;
+		KASSERT((unsigned int) nRamFrames > page_i);
+		KASSERT(coremap[page_i].allocSize == 1);
+
+		/* Take old variables to change them in next conditions */
+		spinlock_acquire(&victim_lock);
+			last_new = last_alloc;
+			victim_new = victim;
+		spinlock_release(&victim_lock);
+		
+		/* Update the coremap and prepare the indexes */
+		spinlock_acquire(&coremap_lock);
+		if (coremap[page_i].prev_allocated == const_invalid_reference) {
+			if (coremap[page_i].next_allocated == const_invalid_reference) {
+				victim_new = const_invalid_reference;
+				last_new = const_invalid_reference;
+			}
+			else {
+				KASSERT(page_i == victim_new);
+				coremap[coremap[page_i].next_allocated].prev_allocated = const_invalid_reference;
+				victim_new = coremap[page_i].next_allocated;
+			}
+		} else {
+			if (coremap[page_i].next_allocated == const_invalid_reference) {
+				KASSERT(page_i == last_new);
+				coremap[coremap[page_i].prev_allocated].next_allocated = const_invalid_reference;
+				last_new = coremap[page_i].prev_allocated;
+			} else {
+				coremap[coremap[page_i].next_allocated].prev_allocated = coremap[page_i].prev_allocated;
+				coremap[coremap[page_i].prev_allocated].next_allocated = coremap[page_i].next_allocated;
+			}
+		}
+
+		coremap[page_i].next_allocated = const_invalid_reference;
+		coremap[page_i].prev_allocated = const_invalid_reference;
+		
+		spinlock_release(&coremap_lock);
+
+		freeppages(paddr, 1);
+
+		spinlock_acquire(&victim_lock);
+		victim = victim_new;
+		last_alloc = last_new;
+		spinlock_release(&victim_lock);
+	}
+}
+
+paddr_t alloc_upage(vaddr_t vaddr)
+{
 	paddr_t pa;
 
 	suchvm_can_sleep();
 	pa = getppage_user(vaddr);
-	
+
 	return pa;
 }
 
-void free_upage(paddr_t paddr) {
-	if (isCoremapActive())
-	{
-		long index = paddr / PAGE_SIZE;
-		KASSERT(nRamFrames > index);
-		KASSERT(coremap[index].allocSize == 1);
-		freeppages(paddr, 1);
-		
-		spinlock_acquire(&allocqueue_lock);
-		allocqueue_rementry(allocqueue_user, &coremap[index]);
-		spinlock_release(&allocqueue_lock);
-	}
+void free_upage(paddr_t paddr)
+{
+	freeppage_user(paddr);
 }

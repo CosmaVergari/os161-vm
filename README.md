@@ -310,3 +310,8 @@ DUBBI DALLA TRACCIA
 
 
 Idea: implementare memory mapping di un file e utilizzare vop_mmap per mappare lo swap file in memoria
+
+Cambio idee:
+- struct allocqueue simile a threadlist che contenesse la lista di nodi che sono stati allocati
+- numero in coremap che va in ordine crescente in ordine cronologico
+- lista in coremap implementata come indici in coremap
