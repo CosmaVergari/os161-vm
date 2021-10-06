@@ -314,4 +314,14 @@ Idea: implementare memory mapping di un file e utilizzare vop_mmap per mappare l
 Cambio idee:
 - struct allocqueue simile a threadlist che contenesse la lista di nodi che sono stati allocati
 - numero in coremap che va in ordine crescente in ordine cronologico
-- lista in coremap implementata come indici in coremap
+- allocqueue in coremap implementata come indici nelle singole coremap_entry -> IMPLEMENTATA
+
+La allocqueue è implementata con gli indici all'interno delle coremap_entry (next_allocated, prev_allocated). Ogni entry contiene due indici: uno che punta alla entry che è stata allocata prima di quella considerata e uno che punta alla entry che è stata allocata dopo.
+
+Problemi:
+* testbin/bloat si blocca con TLB miss on store (potrebbe essere perchè non abbiamo implementato la sbrk ancora?) => Inutilizzabile se non si implementa l'allocazione dinamica della memoria
+* testbin/zero fallisce perchè il blocco .bss non è azzerato, ma quindi questo test prevede che il **contenuto** del blocco .bss sia azzerato e non solo i contorni del segmento? => Esatto ma questo viene fatto da exec che non abbiamo implementato.
+
+Test adatti: **testbin/huge**, **testbin/mat**
+Problema: huge non funziona: TLB miss on store quando cerca di scrivere in un'area di memoria che probabilmente non è nella page table
+Questo è anticipato da un messaggio "segments.c - short read from file, truncated?". Bisogna debuggare vm_fault.

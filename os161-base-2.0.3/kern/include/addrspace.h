@@ -126,6 +126,8 @@ int               as_prepare_load(struct addrspace *as);
 int               as_complete_load(struct addrspace *as);
 int               as_define_stack(struct addrspace *as, vaddr_t *initstackptr);
 
+struct prog_segment* as_find_segment(struct addrspace *as, vaddr_t vaddr);
+
 
 /*
  * Functions in loadelf.c

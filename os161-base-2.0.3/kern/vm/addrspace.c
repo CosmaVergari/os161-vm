@@ -275,3 +275,49 @@ int as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 
 	return 0;
 }
+
+struct prog_segment* as_find_segment(struct addrspace *as, vaddr_t vaddr) {
+	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
+	struct prog_segment *ps;
+
+	/* Check if address space is fully populated */
+    KASSERT(as != NULL);
+    KASSERT(as->seg1 != NULL);
+    KASSERT(as->seg2 != NULL);
+    KASSERT(as->seg_stack != NULL);
+    KASSERT(as->seg1->pagetable != NULL);
+    KASSERT(as->seg2->pagetable != NULL);
+    KASSERT(as->seg_stack->pagetable != NULL);
+    KASSERT((as->seg1->base_vaddr & PAGE_FRAME) == as->seg1->base_vaddr);
+    KASSERT((as->seg2->base_vaddr & PAGE_FRAME) == as->seg2->base_vaddr);
+    KASSERT((as->seg_stack->base_vaddr & PAGE_FRAME) == as->seg_stack->base_vaddr);
+
+    /* 
+     * Check if the fault address is within the boundaries of
+     * the current address space
+     */
+    vbase1 = as->seg1->base_vaddr;
+    vtop1 = vbase1 + (as->seg1->n_pages) * PAGE_SIZE;
+    vbase2 = as->seg2->base_vaddr;
+    vtop2 = vbase2 + (as->seg2->n_pages) * PAGE_SIZE;
+    stackbase = USERSTACK - SUCHVM_STACKPAGES * PAGE_SIZE;
+    stacktop = USERSTACK;
+    if (vaddr >= vbase1 && vaddr < vtop1)
+    {
+        ps = as->seg1;
+    }
+    else if (vaddr >= vbase2 && vaddr < vtop2)
+    {
+        ps = as->seg2;
+    }
+    else if (vaddr >= stackbase && vaddr < stacktop)
+    {
+        ps = as->seg_stack;
+    }
+    else
+    {
+        return NULL;
+    }
+
+	return ps;
+}

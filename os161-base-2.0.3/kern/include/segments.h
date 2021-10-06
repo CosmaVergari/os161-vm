@@ -28,9 +28,14 @@ int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, of
 int seg_define_stack(struct prog_segment *ps, vaddr_t base_vaddr, size_t n_pages);
 int seg_prepare(struct prog_segment *ps);
 int seg_copy(struct prog_segment *old, struct prog_segment **ret);
+
 paddr_t seg_get_paddr(struct prog_segment *ps, vaddr_t addr);
 void seg_add_pt_entry(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr);
 int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr);
+
+void seg_swap_out(struct prog_segment *ps, off_t file_offset, vaddr_t swapped_entry);
+void seg_swap_in(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr);
+
 void seg_destroy(struct prog_segment *ps);
 
 #endif /* SEGMENTS_H */

@@ -319,6 +319,21 @@ void seg_add_pt_entry(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
     pt_add_entry(ps->pagetable, vaddr, paddr);
 }
 
+void seg_swap_out(struct prog_segment *ps, off_t file_offset, vaddr_t swapped_entry) {
+    KASSERT(ps != NULL);
+    KASSERT(ps -> pagetable != NULL);
+
+    pt_swap_out(ps->pagetable, file_offset, swapped_entry);
+}
+
+void seg_swap_in(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr){
+    KASSERT(ps != NULL);
+    KASSERT(ps -> pagetable != NULL);
+    KASSERT(paddr != 0);
+
+    pt_swap_in(ps->pagetable, vaddr, paddr);
+}
+
 /*
  * Destroy the segment and its contents
  */

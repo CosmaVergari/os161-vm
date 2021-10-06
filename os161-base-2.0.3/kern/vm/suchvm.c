@@ -65,7 +65,6 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
     unsigned int tlb_index;
     int spl, result;
     char unpopulated;
-    vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
     paddr_t paddr;
     uint32_t entry_hi, entry_lo;
     struct addrspace *as;
@@ -111,41 +110,8 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
         return EFAULT;
     }
 
-    /* Check if address space is fully populated */
-    KASSERT(as != NULL);
-    KASSERT(as->seg1 != NULL);
-    KASSERT(as->seg2 != NULL);
-    KASSERT(as->seg_stack != NULL);
-    KASSERT(as->seg1->pagetable != NULL);
-    KASSERT(as->seg2->pagetable != NULL);
-    KASSERT(as->seg_stack->pagetable != NULL);
-    KASSERT((as->seg1->base_vaddr & PAGE_FRAME) == as->seg1->base_vaddr);
-    KASSERT((as->seg2->base_vaddr & PAGE_FRAME) == as->seg2->base_vaddr);
-    KASSERT((as->seg_stack->base_vaddr & PAGE_FRAME) == as->seg_stack->base_vaddr);
-
-    /* 
-     * Check if the fault address is within the boundaries of
-     * the current address space
-     */
-    vbase1 = as->seg1->base_vaddr;
-    vtop1 = vbase1 + (as->seg1->n_pages) * PAGE_SIZE;
-    vbase2 = as->seg2->base_vaddr;
-    vtop2 = vbase2 + (as->seg2->n_pages) * PAGE_SIZE;
-    stackbase = USERSTACK - SUCHVM_STACKPAGES * PAGE_SIZE;
-    stacktop = USERSTACK;
-    if (faultaddress >= vbase1 && faultaddress < vtop1)
-    {
-        ps = as->seg1;
-    }
-    else if (faultaddress >= vbase2 && faultaddress < vtop2)
-    {
-        ps = as->seg2;
-    }
-    else if (faultaddress >= stackbase && faultaddress < stacktop)
-    {
-        ps = as->seg_stack;
-    }
-    else
+    ps = as_find_segment(as, faultaddress);
+    if (ps == NULL)
     {
         return EFAULT;
     }
@@ -157,6 +123,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
      */
     unpopulated = 0;
     paddr = seg_get_paddr(ps, faultaddress);
+
     if (paddr == PT_UNPOPULATED_PAGE)
     {
         /* 
@@ -170,8 +137,18 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
         }
         unpopulated = 1;
     }
+    else if (paddr == PT_SWAPPED_PAGE)
+    {
+        // TODO : here swapin function
 
-    // TODO : here could be  a check for SWAP_OUT_PAGE and call the swapin function
+        /*
+         *  recover the offset in the swapfile ( saved in the pagetable)
+         *  
+         * 
+         * 
+         * 
+         */
+    }
 
     /* make sure it's page-aligned */
     KASSERT((paddr & PAGE_FRAME) == paddr);
