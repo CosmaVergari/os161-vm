@@ -116,7 +116,8 @@ void              as_deactivate(void);
 void              as_destroy(struct addrspace *as);
 
 int               as_define_region(struct addrspace *as,
-                                   vaddr_t vaddr, size_t sz,
+                                   vaddr_t vaddr, size_t memsize,
+                                   size_t file_size,
                                    off_t offset,
                                    struct vnode *v,
                                    int readable,

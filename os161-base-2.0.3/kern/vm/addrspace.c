@@ -170,7 +170,7 @@ void as_deactivate(void)
  * moment, these are ignored. When you write the VM system, you may
  * want to implement them.
  */
-int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
+int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize, size_t file_size,
 					 off_t offset, struct vnode *v, int readable, int writeable, int executable)
 {
 	size_t npages;
@@ -198,7 +198,7 @@ int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		{
 			return ENOMEM;
 		}
-		seg_define(as->seg1, vaddr, memsize, offset, npages, v, readable, writeable, executable);
+		seg_define(as->seg1, vaddr, file_size, offset, npages, v, readable, writeable, executable);
 		return 0;
 	}
 	if (as->seg2 == NULL)
@@ -208,7 +208,7 @@ int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		{
 			return ENOMEM;
 		}
-		seg_define(as->seg2, vaddr, memsize, offset, npages, v, readable, writeable, executable);
+		seg_define(as->seg2, vaddr, file_size, offset, npages, v, readable, writeable, executable);
 		return 0;
 	}
 

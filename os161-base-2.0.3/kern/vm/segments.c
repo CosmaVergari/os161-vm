@@ -217,10 +217,11 @@ int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
          * to the beginning of the actual content of the page, so of a length of
          * vbaseoffset.
          */
+        // |00000000000XXzz|zzzzzzzzzzzzzzz|zzzzz0000000000|
+        // |           |base_vaddr
         dest_paddr = paddr + vbaseoffset;
-        read_len = PAGE_SIZE - vbaseoffset;
+        read_len = (PAGE_SIZE - vbaseoffset > ps->file_size) ? ps->file_size : PAGE_SIZE - vbaseoffset;
         file_offset = ps->file_offset;
-        zero_a_region(paddr & PAGE_FRAME, vbaseoffset);
     }
     else if (page_index == (ps->n_pages) - 1)
     {
@@ -230,7 +231,7 @@ int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
          *
          *                                   paddr->LOAD HERE!
          *                                   v
-         *   |00000000000xxxx|xxxxxxxxxxxxxxx|xxxxx0000000000|
+         *   |00000000000xxxx|xxxxxxxxxxxxxxx|xxxzz0000000000|
          *               |                      ^vaddr          => page_index = ps->n_pages-1
          *   |<--------->^(ps->base_vaddr)
          *        ^vbaseoffset               
@@ -239,9 +240,14 @@ int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
          */
         voffset = (ps->n_pages - 1) * PAGE_SIZE - vbaseoffset;
         dest_paddr = paddr;
-        read_len = ps->file_size - voffset;
         file_offset = ps->file_offset + voffset;
-        zero_a_region((paddr & PAGE_FRAME) + (ps->file_size - voffset), PAGE_SIZE - (ps->file_size - voffset));
+        if (ps -> file_size > voffset) {
+            read_len = ps->file_size - voffset;
+        } else {
+            read_len = 0;
+            /* Required to pass the assertion below on file_offset */
+            file_offset = ps -> file_size;
+        }
     }
     else
     {
@@ -251,21 +257,33 @@ int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
          *
          *                   paddr->LOAD HERE!
          *                   v
-         *   |00000000000xxxx|xxxxxxxxxxxxxxx|xxxxx0000000000|
+         *   |00000000000xxxx|xxxxxxxxxxxzzzz|zzzzzz0000000000|
          *               |          ^vaddr                     => page_index = ps->n_pages-1
          *   |<--------->^(ps->base_vaddr)
          *        ^vbaseoffset
          * 
          */
+        // |00000000000xxxx|xxxxxxxxxxxxxxx|xxxxxxxxxxxzzzz|zzzzzz0000000000|
         dest_paddr = paddr;
-        read_len = PAGE_SIZE;
         file_offset = ps->file_offset + (page_index * PAGE_SIZE) - vbaseoffset;
+        if (ps -> file_size > ((page_index + 1) * PAGE_SIZE) - vbaseoffset) {
+            read_len = PAGE_SIZE;
+        } else if (ps -> file_size < (page_index * PAGE_SIZE) - vbaseoffset) {
+            read_len = 0;
+            /* Required to pass the assertion below on file_offset */
+            file_offset = ps->file_size;
+        } else {
+            read_len = ps -> file_size - ((page_index * PAGE_SIZE) - vbaseoffset);
+        }
     }
 
     /* Sanity check on read parameters */
     KASSERT((dest_paddr - paddr) / PAGE_SIZE < ps->n_pages);
     KASSERT(read_len <= PAGE_SIZE);
-    KASSERT(file_offset - ps->file_offset < ps->file_size);
+    KASSERT(file_offset - ps->file_offset <= ps->file_size);
+
+    /* Zero the **entire** page */
+    zero_a_region(paddr, PAGE_SIZE);
 
     /* Treat the page as a physical address inside kernel address space and perform a read */
     uio_kinit(&iov, &u, (void *)PADDR_TO_KVADDR(dest_paddr), read_len, file_offset, UIO_READ);
@@ -319,16 +337,18 @@ void seg_add_pt_entry(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
     pt_add_entry(ps->pagetable, vaddr, paddr);
 }
 
-void seg_swap_out(struct prog_segment *ps, off_t file_offset, vaddr_t swapped_entry) {
+void seg_swap_out(struct prog_segment *ps, off_t swapfile_offset, vaddr_t swapped_entry)
+{
     KASSERT(ps != NULL);
-    KASSERT(ps -> pagetable != NULL);
+    KASSERT(ps->pagetable != NULL);
 
-    pt_swap_out(ps->pagetable, file_offset, swapped_entry);
+    pt_swap_out(ps->pagetable, swapfile_offset, swapped_entry);
 }
 
-void seg_swap_in(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr){
+void seg_swap_in(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
+{
     KASSERT(ps != NULL);
-    KASSERT(ps -> pagetable != NULL);
+    KASSERT(ps->pagetable != NULL);
     KASSERT(paddr != 0);
 
     pt_swap_in(ps->pagetable, vaddr, paddr);

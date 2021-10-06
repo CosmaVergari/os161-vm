@@ -122,7 +122,7 @@ void pt_free(struct pagetable *pt)
     }
 }
 
-void pt_swap_out(struct pagetable *pt, off_t file_offset, vaddr_t swapped_entry)
+void pt_swap_out(struct pagetable *pt, off_t swapfile_offset, vaddr_t swapped_entry)
 {
     KASSERT(pt != NULL);
     KASSERT(pt->pages != NULL);
@@ -133,7 +133,7 @@ void pt_swap_out(struct pagetable *pt, off_t file_offset, vaddr_t swapped_entry)
     unsigned long page_index = (swapped_entry - (pt->start_vaddr & PAGE_FRAME)) / PAGE_SIZE;
     KASSERT(pt->pages[page_index] != PT_UNPOPULATED_PAGE);
     KASSERT((pt->pages[page_index] & PT_SWAPPED_MASK) != PT_SWAPPED_PAGE);
-    pt->pages[page_index] = ((paddr_t)file_offset) | PT_SWAPPED_PAGE;
+    pt->pages[page_index] = ((paddr_t)swapfile_offset) | PT_SWAPPED_PAGE;
 }
 
 void pt_swap_in(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)

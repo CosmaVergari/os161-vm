@@ -232,7 +232,7 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 	struct prog_segment *victim_ps;
 	paddr_t addr;
 	unsigned long last_temp, victim_temp, newvictim;
-	off_t file_offset;
+	off_t swapfile_offset;
 	int result;
 
 	as = proc_getas();
@@ -298,7 +298,7 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 		     */
 
 			
-			result = swap_out(victim_temp, &file_offset);
+			result = swap_out(victim_temp, &swapfile_offset);
 			if (result)
 			{
 				panic("Impossible to swap out a page to file\n");
@@ -306,12 +306,10 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 
 			spinlock_acquire(&coremap_lock);
 			victim_ps = as_find_segment(coremap[victim_temp].as, coremap[victim_temp].vaddr);
-			spinlock_release(&coremap_lock);
-
-			seg_swap_out(victim_ps, file_offset, victim_temp);
+			seg_swap_out(victim_ps, swapfile_offset, coremap[victim_temp].vaddr);
+			
 			addr = (paddr_t)victim_temp * PAGE_SIZE;
 
-			spinlock_acquire(&coremap_lock);
 			/*
 			 * Update the coremap information and the allocqueue (put occupied block)
 			 * at the end of the queue

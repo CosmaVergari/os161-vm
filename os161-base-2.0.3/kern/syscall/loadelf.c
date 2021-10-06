@@ -249,6 +249,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 		/* modified version to pass the offset */
 		result = as_define_region(as,
 					  ph.p_vaddr, ph.p_memsz,
+					  ph.p_filesz,
 					  ph.p_offset,
 					  v,
 					  ph.p_flags & PF_R,

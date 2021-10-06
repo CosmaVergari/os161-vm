@@ -323,5 +323,12 @@ Problemi:
 * testbin/zero fallisce perchè il blocco .bss non è azzerato, ma quindi questo test prevede che il **contenuto** del blocco .bss sia azzerato e non solo i contorni del segmento? => Esatto ma questo viene fatto da exec che non abbiamo implementato.
 
 Test adatti: **testbin/huge**, **testbin/mat**
+
 Problema: huge non funziona: TLB miss on store quando cerca di scrivere in un'area di memoria che probabilmente non è nella page table
 Questo è anticipato da un messaggio "segments.c - short read from file, truncated?". Bisogna debuggare vm_fault.
+
+Problema: file size non viene passata correttamente da load_elf a as_define region
+TODO: Passare il corretto file size
+TODO: Riempire di zeri le regioni di memoria con memsize > filesize
+
+TODO: Aggiornare documentazione seg_load_page

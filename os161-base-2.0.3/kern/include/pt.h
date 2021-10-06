@@ -29,7 +29,7 @@ int pt_copy(struct pagetable *old, struct pagetable **ret);
 paddr_t pt_get_entry(struct pagetable *pt, vaddr_t vaddr);
 void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr);
 void pt_free(struct pagetable *pt);
-void pt_swap_out(struct pagetable *pt, off_t file_offset, vaddr_t swapped_entry);
+void pt_swap_out(struct pagetable *pt, off_t swapfile_offset, vaddr_t swapped_entry);
 void pt_swap_in(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr);
 void pt_destroy(struct pagetable *pt);
 
