@@ -140,14 +140,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
     else if (paddr == PT_SWAPPED_PAGE)
     {
         // TODO : here swapin function
-
-        /*
-         *  recover the offset in the swapfile ( saved in the pagetable)
-         *  
-         * 
-         * 
-         * 
-         */
+        swap_in();
     }
 
     /* make sure it's page-aligned */

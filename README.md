@@ -332,3 +332,5 @@ TODO: Passare il corretto file size
 TODO: Riempire di zeri le regioni di memoria con memsize > filesize
 
 TODO: Aggiornare documentazione seg_load_page
+
+Problema: ci sono molti page fault sulle stesse pagine => Causato dalla syscall write che mentre scrive su console deschedula il processo e al ritorno chiama la thread_switch che svuota la tlb.
