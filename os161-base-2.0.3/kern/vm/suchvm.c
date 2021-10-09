@@ -139,8 +139,12 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
     }
     else if (paddr == PT_SWAPPED_PAGE)
     {
-        // TODO : here swapin function
-        swap_in();
+        /* 
+         * Alloc one page in coremap swap in and update the page table 
+         * (inside seg_swap_in())
+         */
+        paddr = alloc_upage(faultaddress);
+        seg_swap_in(ps, faultaddress, paddr);
     }
 
     /* make sure it's page-aligned */

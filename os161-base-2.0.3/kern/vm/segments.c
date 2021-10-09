@@ -6,6 +6,7 @@
 #include <uio.h>
 #include <coremap.h>
 #include <vm.h>
+#include <swapfile.h>
 #include <segments.h>
 
 /*
@@ -351,6 +352,9 @@ void seg_swap_in(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
     KASSERT(ps->pagetable != NULL);
     KASSERT(paddr != 0);
 
+    off_t swap_offset = pt_get_swap_offset(ps->pagetable, vaddr);
+    /* SWAP IN and update the page table */
+    swap_in(paddr, swap_offset);
     pt_swap_in(ps->pagetable, vaddr, paddr);
 }
 

@@ -31,6 +31,7 @@ void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr);
 void pt_free(struct pagetable *pt);
 void pt_swap_out(struct pagetable *pt, off_t swapfile_offset, vaddr_t swapped_entry);
 void pt_swap_in(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr);
+off_t pt_get_swap_offset(struct pagetable *pt, vaddr_t vaddr);
 void pt_destroy(struct pagetable *pt);
 
 #endif /* PT_H */

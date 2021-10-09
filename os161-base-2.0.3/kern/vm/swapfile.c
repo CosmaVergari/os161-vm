@@ -59,6 +59,9 @@ int swap_out(paddr_t page_paddr, off_t *ret_offset)
     struct uio u;
     int result;
 
+    KASSERT(page_paddr != 0);
+    KASSERT((page_paddr & PAGE_FRAME) == page_paddr);
+
     result = bitmap_alloc(swapmap, &free_index);
     if (result) {
         panic("swapfile.c : Not enough space in swapfile\n");
@@ -77,6 +80,27 @@ int swap_out(paddr_t page_paddr, off_t *ret_offset)
     return 0;
 }
 
-void swap_in(void) {
-    kprintf("Ciao");
+int swap_in(paddr_t page_paddr, off_t swap_offset) {
+    unsigned int swap_index;
+    struct iovec iov;
+    struct uio u;
+
+    KASSERT((page_paddr & PAGE_FRAME) == page_paddr);
+    KASSERT((swap_offset & PAGE_FRAME) == swap_offset);
+    KASSERT(swap_offset < SWAPFILE_SIZE);
+
+    swap_index = swap_offset / PAGE_SIZE;
+
+    if (!bitmap_isset(swapmap, swap_index)) {
+        panic("swapfile.c: Trying to access an unpopulated page in swapfile\n");
+    }
+
+    uio_kinit(&iov, &u, (void *) PADDR_TO_KVADDR(page_paddr), PAGE_SIZE, swap_offset, UIO_READ);
+    VOP_READ(swapfile, &u);
+    if (u.uio_resid != 0) {
+        panic("swapfile.c : Could not read from swapfile addr %u\n", page_paddr);
+    }
+
+    bitmap_unmark(swapmap, swap_index);
+    return 0;
 }

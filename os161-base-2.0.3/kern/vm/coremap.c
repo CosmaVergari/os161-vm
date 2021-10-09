@@ -297,8 +297,9 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 		     * entry_type che sia COREMAP_BUSY_USER-> DONE assicurato dalla allocqueue 
 		     */
 
-			
-			result = swap_out(victim_temp, &swapfile_offset);
+			addr = (paddr_t)victim_temp * PAGE_SIZE;
+
+			result = swap_out(addr, &swapfile_offset);
 			if (result)
 			{
 				panic("Impossible to swap out a page to file\n");
@@ -307,8 +308,6 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 			spinlock_acquire(&coremap_lock);
 			victim_ps = as_find_segment(coremap[victim_temp].as, coremap[victim_temp].vaddr);
 			seg_swap_out(victim_ps, swapfile_offset, coremap[victim_temp].vaddr);
-			
-			addr = (paddr_t)victim_temp * PAGE_SIZE;
 
 			/*
 			 * Update the coremap information and the allocqueue (put occupied block)
