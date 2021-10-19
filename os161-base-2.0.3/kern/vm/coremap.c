@@ -320,6 +320,8 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 			coremap[victim_temp].as = as;
 
 			newvictim = coremap[victim_temp].next_allocated;
+			/* We don't need to check if the linked list is empty because we are swapping = memory is full */
+			coremap[last_temp].next_allocated = victim_temp;
 			coremap[victim_temp].next_allocated = const_invalid_reference;
 			coremap[victim_temp].prev_allocated = last_temp;
 			spinlock_release(&coremap_lock);

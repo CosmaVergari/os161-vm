@@ -104,3 +104,19 @@ int swap_in(paddr_t page_paddr, off_t swap_offset) {
     bitmap_unmark(swapmap, swap_index);
     return 0;
 }
+
+void swap_free(off_t swap_offset) {
+    unsigned int swap_index;
+
+    KASSERT((swap_offset & PAGE_FRAME) == swap_offset);
+    KASSERT(swap_offset < SWAPFILE_SIZE);
+
+    swap_index = swap_offset / PAGE_SIZE;
+
+    if (!bitmap_isset(swapmap, swap_index)) {
+        panic("swapfile.c: Error: freeing an unpopulated page\n");
+    }
+
+    /* Leave the use of the page to some other program, no need to zero it */
+    bitmap_unmark(swapmap, swap_index);
+}

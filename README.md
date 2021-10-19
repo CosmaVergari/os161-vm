@@ -334,3 +334,6 @@ TODO: Riempire di zeri le regioni di memoria con memsize > filesize
 TODO: Aggiornare documentazione seg_load_page
 
 Problema: ci sono molti page fault sulle stesse pagine => Causato dalla syscall write che mentre scrive su console deschedula il processo e al ritorno chiama la thread_switch che svuota la tlb.
+
+Problema: bordello nella coremap dopo lo swapout della pagina 0x7e000
+Test: vedere come funziona la lista nella coremap quando rimpiazza una pagina dopo lo swap

@@ -4,6 +4,7 @@
 #include <pt.h>
 #include <coremap.h>
 #include <vm.h>
+#include <swapfile.h>
 
 struct pagetable *pt_create(unsigned long size_in_pages, vaddr_t start_address)
 {
@@ -117,7 +118,11 @@ void pt_free(struct pagetable *pt)
     {
         if (pt->pages[i] != PT_UNPOPULATED_PAGE)
         {
-            free_upage(pt->pages[i]);
+            if ((pt -> pages[i] & PT_SWAPPED_MASK) == PT_SWAPPED_PAGE) {
+                swap_free(pt -> pages[i] & (~PT_SWAPPED_MASK));
+            } else {
+                free_upage(pt->pages[i]);
+            }
         }
     }
 }
