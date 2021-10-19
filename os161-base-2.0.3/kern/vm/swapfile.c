@@ -10,13 +10,25 @@
 #define SWAP_DEBUG 1 /* Does extra operations to ensure swap is zeroed and easy to debug */
 
 // TODO le funzioni di swap in e swap out vanno dichiarate dopo aver risolto i dubbi del readME
-// TODO la gestione del file
 
+/* 
+ * Node handle in the file system  for the swapfile
+ * (see SWAPFILE_PATH for location).
+ * It is opened at the initialization of the VM and used thereon.
+ */
 static struct vnode *swapfile;
 
+/*
+ * Uses the builtin bitmap structure to represent efficiently which
+ * pages in the swapfile have been occupied and which are not 
+ * occupied and may be used to swap out.
+ */
 static struct bitmap *swapmap;
 
-/* Opens SWAPFILE from root directory */
+/* 
+ * Opens SWAPFILE from root directory, fills it with zeroes if
+ * SWAP_DEBUG is set and then initializes and allocs the bitmap swapmap.
+ */
 int swap_init(void)
 {
     int result;
@@ -51,6 +63,14 @@ int swap_init(void)
     return 0;
 }
 
+/*
+ * Writes in the first free page in the swapfile the content of
+ * the memory pointed by argument page_paddr.
+ * The offset inside the swapfile where the page has been saved
+ * is returned by reference (ret_offset)
+ * Update the swapmap as a consequence.
+ * Returns 0 on success, panic on some failure.
+ */
 int swap_out(paddr_t page_paddr, off_t *ret_offset)
 {
     unsigned int free_index;
@@ -80,6 +100,11 @@ int swap_out(paddr_t page_paddr, off_t *ret_offset)
     return 0;
 }
 
+/*
+ * Read the content of the swapfile at offset ret_offset into a 
+ * pre-allocated memory space pointed by page_paddr.
+ * Update the swapmap as a consequence.
+ */
 int swap_in(paddr_t page_paddr, off_t swap_offset) {
     unsigned int swap_index;
     struct iovec iov;
@@ -105,6 +130,10 @@ int swap_in(paddr_t page_paddr, off_t swap_offset) {
     return 0;
 }
 
+/* 
+ * Discard the page from the swapfile by clearing its bit 
+ * in the bitmap. No zero-fill done in this case.
+ */
 void swap_free(off_t swap_offset) {
     unsigned int swap_index;
 
