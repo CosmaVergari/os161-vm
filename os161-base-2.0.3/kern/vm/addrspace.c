@@ -39,12 +39,6 @@
 #include <segments.h>
 #include <suchvm.h>
 
-/*
- * Note! If OPT_DUMBVM is set, as is the case until you start the VM
- * assignment, this file is not compiled or linked or in any way
- * used. The cheesy hack versions in dumbvm.c are used instead.
- */
-
 struct addrspace *
 as_create(void)
 {
@@ -104,22 +98,18 @@ int as_copy(struct addrspace *old, struct addrspace **ret)
 
 void as_destroy(struct addrspace *as)
 {
-	/*
-	 * Clean up as needed.
-	 */
 	struct vnode *v;
-
 	KASSERT(as != NULL);
-	KASSERT(as->seg1->elf_vnode != NULL);
-	KASSERT(as->seg1 != NULL);
-	KASSERT(as->seg2 != NULL);
-	KASSERT(as->seg_stack != NULL);
 
+	/* 
+	* Destroy the defined segments, close the ELF file 
+	* and free the structure 
+	*/
 	v = as->seg1->elf_vnode;
-	seg_destroy(as->seg1);
-	seg_destroy(as->seg2);
-	seg_destroy(as->seg_stack);
-	vfs_close(v);
+	if (as -> seg1 != NULL) seg_destroy(as->seg1);
+	if (as -> seg2 != NULL)seg_destroy(as->seg2);
+	if (as -> seg_stack != NULL)seg_destroy(as->seg_stack);
+	if (v != NULL) vfs_close(v);
 
 	kfree(as);
 }
@@ -143,6 +133,7 @@ void as_activate(void)
 	/* Disable interrupts on this CPU while frobbing the TLB. */
 	spl = splhigh();
 
+	/* Invalidate the whole TLB */
 	for (i = 0; i < NUM_TLB; i++)
 	{
 		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
@@ -157,6 +148,7 @@ void as_deactivate(void)
 	 * Write this. For many designs it won't need to actually do
 	 * anything. See proc.c for an explanation of why it (might)
 	 * be needed.
+	 * We didn't need it.
 	 */
 }
 
@@ -178,7 +170,7 @@ int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize, size_t
 	KASSERT(as != NULL);
 	KASSERT(v != NULL);
 
-	/* Compute the length of the segment in number of pages */
+	/* Compute the length of the segment as number of pages */
 	npages = memsize + (vaddr & ~(vaddr_t)PAGE_FRAME);
 	npages = (npages + PAGE_SIZE - 1) & PAGE_FRAME;
 	npages = npages / PAGE_SIZE;
@@ -211,7 +203,6 @@ int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize, size_t
 
 	/*
 	 * Support for more than two regions is not available.
-	 * // TODO do we need to implement it?
 	 */
 	kprintf("dumbvm: Warning: too many regions\n");
 	return ENOSYS;
@@ -239,8 +230,6 @@ int as_prepare_load(struct addrspace *as)
 
 int as_complete_load(struct addrspace *as)
 {
-	// TODO: Check if needed
-
 	(void)as;
 	return 0;
 }
@@ -262,7 +251,9 @@ int as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	{
 		return ENOMEM;
 	}
-	if (seg_define_stack(as->seg_stack, USERSTACK - (SUCHVM_STACKPAGES * PAGE_SIZE), SUCHVM_STACKPAGES) != 0)
+	if (seg_define_stack(as->seg_stack, 
+	    				 USERSTACK - (SUCHVM_STACKPAGES * PAGE_SIZE), 
+						 SUCHVM_STACKPAGES) != 0)
 	{
 		return ENOMEM;
 	}
@@ -317,8 +308,6 @@ struct prog_segment* as_find_segment(struct addrspace *as, vaddr_t vaddr) {
 	return ps;
 }
 
-/* Use it as little as possible, only when checks on precise
- * boundaries of the passed address space are not available */
 struct prog_segment* as_find_segment_coarse(struct addrspace *as, vaddr_t vaddr) {
 	
 	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;

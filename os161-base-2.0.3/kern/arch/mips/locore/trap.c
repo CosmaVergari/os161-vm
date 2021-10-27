@@ -91,6 +91,14 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
 	    case EX_TLBS:
 		sig = SIGSEGV;
 #ifdef OPT_SUCHVM
+		/* 
+		 * Executed when a TLB miss on R/W or an EX_MOD (write on a 
+		 * read-only segment) exception is raised, usually as a result
+		 * of a non-zero return value of vm_fault().
+		 * Handle it by showing a segmentation fault error and by gracefully
+		 * freeing the allocated pages in memory and in the swap file by 
+		 * invoking the exit systemcall.
+		 */
 		kprintf("Segmentation fault: faulty memory access.\n(%s, epc 0x%x, vaddr 0x%x)\n", 
 			trapcodenames[code], epc, vaddr);
 		sys__exit(-1);

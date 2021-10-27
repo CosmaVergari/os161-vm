@@ -127,6 +127,28 @@ int               as_prepare_load(struct addrspace *as);
 int               as_complete_load(struct addrspace *as);
 int               as_define_stack(struct addrspace *as, vaddr_t *initstackptr);
 
+/*
+ * Given an address space and a virtual address belonging to this
+ * address space as_find_segment() finds the proper segment in the
+ * given address space that the virtual address belongs to.
+ * We coded 2 variants:
+ *  - as_find_segment():        finds the segment by precisely checking if vaddr
+ *                              is between the start and the end address (defined as 
+ *                              base_vaddr + mem_size) of one of the segments.
+ *                              Returns the segment if found, NULL otherwise.
+ * 
+ * - as_find_segment_coarse():  AVOID USING THIS! This function finds the segment
+ *                              by checking if vaddr is between the **page-aligned**
+ *                              virtual address start and end (defined as
+ *                              base_vaddr + n_pages * PAGE_SIZE) of one of the segments.
+ *                              Returns the segment if found, NULL otherwise.
+ * 
+ * Avoid using as_find_segment_coarse because it may try to access
+ * a virtual address that is not within the *real* boundaries of any 
+ * segment of the given address space. Use it only when absolutely
+ * sure that the next operations are aware of the real base_vaddr, or
+ * they don't need to be.
+ */
 struct prog_segment* as_find_segment(struct addrspace *as, vaddr_t vaddr);
 struct prog_segment* as_find_segment_coarse(struct addrspace *as, vaddr_t vaddr);
 
