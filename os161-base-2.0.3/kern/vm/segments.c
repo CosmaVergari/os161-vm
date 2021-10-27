@@ -44,7 +44,7 @@ struct prog_segment *seg_create(void)
  * For each of them save the parameters that will be useful to alloc a page table
  * and to solve a vm_fault properly.
  */
-int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, off_t file_offset,
+int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, off_t file_offset, size_t mem_size,
                size_t n_pages, struct vnode *v, char read, char write, char execute)
 {
     KASSERT(ps != NULL);
@@ -53,8 +53,6 @@ int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, of
     KASSERT(ps->base_vaddr == 0);
 
     /* Sanity checks on variables */
-    KASSERT(base_vaddr != 0);
-    KASSERT(file_size > 0);
     KASSERT(n_pages > 0);
     KASSERT(v != NULL);
     KASSERT(read || write || execute);
@@ -62,6 +60,7 @@ int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, of
     ps->base_vaddr = base_vaddr;
     ps->file_size = file_size;
     ps->file_offset = file_offset;
+    ps->mem_size = mem_size;
     ps->n_pages = n_pages;
     ps->elf_vnode = v;
     if (write)
@@ -94,6 +93,7 @@ int seg_define_stack(struct prog_segment *ps, vaddr_t base_vaddr, size_t n_pages
     ps->base_vaddr = base_vaddr;
     ps->file_size = 0;
     ps->file_offset = 0;
+    ps->mem_size = n_pages * PAGE_SIZE;
     ps->n_pages = n_pages;
     ps->elf_vnode = NULL;
     ps->permissions = PAGE_STACK;
@@ -142,7 +142,7 @@ int seg_copy(struct prog_segment *old, struct prog_segment **ret)
 
     if (old->pagetable != NULL)
     {
-        if (!seg_define(newps, old->base_vaddr, old->file_size, old->file_offset,
+        if (!seg_define(newps, old->base_vaddr, old->file_size, old->file_offset, old->mem_size,
                         old->n_pages, old->elf_vnode, 1, old->permissions == PAGE_RONLY ? 0 : 1, 1))
         {
             return ENOMEM;
@@ -279,7 +279,7 @@ int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
     }
 
     /* Sanity check on read parameters */
-    KASSERT((dest_paddr - paddr) / PAGE_SIZE < ps->n_pages);
+    KASSERT(dest_paddr - paddr < PAGE_SIZE);
     KASSERT(read_len <= PAGE_SIZE);
     KASSERT(file_offset - ps->file_offset <= ps->file_size);
 
@@ -318,7 +318,7 @@ paddr_t seg_get_paddr(struct prog_segment *ps, vaddr_t vaddr)
     KASSERT(ps->n_pages != 0);
     KASSERT(ps->pagetable != NULL);
     KASSERT(vaddr >= ps->base_vaddr);
-    KASSERT(vaddr < (ps->base_vaddr) + (ps->n_pages * PAGE_SIZE));
+    KASSERT(vaddr < (ps->base_vaddr) + ps->mem_size);
 
     /* Get physical address from page table */
     paddr = pt_get_entry(ps->pagetable, vaddr);
@@ -334,6 +334,8 @@ void seg_add_pt_entry(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
     KASSERT(ps != NULL);
     KASSERT(ps->pagetable != NULL);
     KASSERT(paddr != 0);
+    KASSERT(vaddr >= ps->base_vaddr);
+    KASSERT(vaddr < (ps->base_vaddr) + ps->mem_size);
 
     pt_add_entry(ps->pagetable, vaddr, paddr);
 }
@@ -351,6 +353,8 @@ void seg_swap_in(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
     KASSERT(ps != NULL);
     KASSERT(ps->pagetable != NULL);
     KASSERT(paddr != 0);
+    KASSERT(vaddr >= ps->base_vaddr);
+    KASSERT(vaddr < (ps->base_vaddr) + ps->mem_size);
 
     off_t swap_offset = pt_get_swap_offset(ps->pagetable, vaddr);
     /* SWAP IN and update the page table */

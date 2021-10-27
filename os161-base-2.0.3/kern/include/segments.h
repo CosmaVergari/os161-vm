@@ -18,12 +18,13 @@ struct prog_segment
     off_t file_offset;
     vaddr_t base_vaddr;
     size_t n_pages;
+    size_t mem_size;
     struct vnode *elf_vnode;
     struct pagetable *pagetable;
 };
 
 struct prog_segment *seg_create(void);
-int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, off_t file_offset,
+int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, off_t file_offset, size_t mem_size,
                size_t n_pages, struct vnode *v, char read, char write, char execute);
 int seg_define_stack(struct prog_segment *ps, vaddr_t base_vaddr, size_t n_pages);
 int seg_prepare(struct prog_segment *ps);

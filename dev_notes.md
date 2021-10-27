@@ -337,3 +337,50 @@ Problema: ci sono molti page fault sulle stesse pagine => Causato dalla syscall 
 
 Problema: bordello nella coremap dopo lo swapout della pagina 0x7e000
 Test: vedere come funziona la lista nella coremap quando rimpiazza una pagina dopo lo swap
+
+
+# Update: 26/10
+Si è rotto tutto.
+testbin/sort non funziona, a un certo punto il faultaddress diventa 0x0
+testbin/sort segments:
+ - code: 0x400000-0x403000
+         filesize: 10112
+         fileoffset: 0
+         basevaddr = 0x400000
+         npages=3
+- data: 0x412000-0x533000
+         filesize: 176
+         fileoffset: 10112
+         basevaddr = 0x412000
+         npages=289
+- stack: 0x7ffee000-0x80000000
+         filesize: 0
+         fileoffset: 0
+         basevaddr = 0x7ffee000
+         npages=18
+
+
+page_faults
+0x400180 => code
+0x412838 => data
+0x400198 => code
+0x7fffffe8 => stack
+
+
+Capito il problema: dentro as_define_region allineavamo l'indirizzo virtuale alla pagina, non va bene perchè una pagina virtuale può iniziare a metà della pagina fisica (com'è nel caso di sort). Infatti in sort caricava la pagina dei dati nel punto sbagliato e per questo sfanculava tutto perchè non riusciva a controllare una condizione per andare avanti.
+
+Per sistemare il problema non possiamo più avere una granularità della lunghezza di un segmento a livello n° di pagine ma a livello memsize, quindi dobbiamo cambiare la struttura segment per tenere traccia della memsize. 
+
+TODO: Dobbiamo rivedere anche il caricamento della pagina (seg_load_page)
+
+Cambio page table per convertire gli indirizzi delle pagine in indici con indirizzi page-aligned
+Problema: nella funzione getppage_user quando viene fatto lo swap out, si determina il segmento della pagina *vittima* attraverso la funzione as_find_segment. Il problema è che la funzione as_find_segment vuole un indirizzo virtuale, noi lo prendiamo dalla coremap dove sono tutti page_aligned, e quindi se un segmento non ha un base_vaddr che è page_aligned (inizia a metà pagina) allora ritorna un errore. 
+
+Soluzioni:
+- togliere controllo sui boundary precisi e farli sulle pagine all'interno di as_find_segment
+- creare una funzione simile ad as_find_segment ma che controlla sulle pagine
+- salvare nella coremap i base_vaddr (Mi sembra una minchiata)
+
+TODO: Controllare se i limiti dichiarati dei segmenti si sovrappongono (e.g. grande segmento data che oltrepassa i limiti di stack)
+
+Gli overflow delle variabili passate da elf li controlliamo?

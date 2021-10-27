@@ -245,7 +245,7 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 	addr = getfreeppages(1, COREMAP_BUSY_USER, as, associated_vaddr);
 	if (addr == 0)
 	{
-		/* call stealmem if nothing found */
+		/* call stealmem for 1 page if nothing found */
 		spinlock_acquire(&stealmem_lock);
 		addr = ram_stealmem(1);
 		spinlock_release(&stealmem_lock);
@@ -306,7 +306,10 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 			}
 
 			spinlock_acquire(&coremap_lock);
-			victim_ps = as_find_segment(coremap[victim_temp].as, coremap[victim_temp].vaddr);
+			
+			victim_ps = as_find_segment_coarse(coremap[victim_temp].as, coremap[victim_temp].vaddr);
+			KASSERT(victim_ps != NULL);
+
 			seg_swap_out(victim_ps, swapfile_offset, coremap[victim_temp].vaddr);
 
 			/*

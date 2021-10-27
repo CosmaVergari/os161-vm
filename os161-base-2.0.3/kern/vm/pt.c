@@ -6,6 +6,11 @@
 #include <vm.h>
 #include <swapfile.h>
 
+/* 
+ * NOTE: Inside the page table all addresses are page aligned so that
+ *       the conversion to index is trivial
+ */
+
 struct pagetable *pt_create(unsigned long size_in_pages, vaddr_t start_address)
 {
     unsigned long i;
@@ -20,7 +25,7 @@ struct pagetable *pt_create(unsigned long size_in_pages, vaddr_t start_address)
     }
 
     pt->size = size_in_pages;
-    pt->start_vaddr = start_address;
+    pt->start_vaddr = start_address & PAGE_FRAME;
     pt->pages = kmalloc(size_in_pages * sizeof(paddr_t));
     if (pt->pages == NULL)
     {
@@ -69,15 +74,13 @@ paddr_t pt_get_entry(struct pagetable *pt, vaddr_t vaddr)
     KASSERT(vaddr >= pt->start_vaddr);
     KASSERT(vaddr < (pt->start_vaddr) + (pt->size * PAGE_SIZE));
 
+    vaddr = vaddr & PAGE_FRAME;
     /* 
-     * When vaddr is at the beginning of a frame and start_vaddr is not page aligned
-     * we need to return the physical address of the frame where start_vaddr is and not
-     * the physical address of the previous frame (which can happen if we do 
-     * vaddr - start_vaddr without aligning to PAGE_FRAME). See schematic below.
-     * |    xxx|xxxxxx|xxx     |
-     *      lstart_vaddr lvaddr   => i=2 
+     * Trivial conversion to index
      */
-    unsigned long page_index = (vaddr - (pt->start_vaddr & PAGE_FRAME)) / PAGE_SIZE;
+    unsigned long page_index = (vaddr - pt->start_vaddr) / PAGE_SIZE;
+    KASSERT(page_index < pt->size);
+
     if (pt->pages[page_index] == PT_UNPOPULATED_PAGE)
     {
         return PT_UNPOPULATED_PAGE;
@@ -96,11 +99,12 @@ void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)
 {
     KASSERT(pt != NULL);
     KASSERT(pt->pages != NULL);
-    KASSERT(vaddr >= pt->start_vaddr);
-    KASSERT(vaddr < (pt->start_vaddr) + (pt->size * PAGE_SIZE));
+    KASSERT((vaddr & PAGE_FRAME) >= pt->start_vaddr);
+    KASSERT((vaddr & PAGE_FRAME) < (pt->start_vaddr) + (pt->size * PAGE_SIZE));
 
-    /* See pt_get_entry() for more information */
-    unsigned long page_index = (vaddr - (pt->start_vaddr & PAGE_FRAME)) / PAGE_SIZE;
+    vaddr = vaddr & PAGE_FRAME;
+    unsigned long page_index = (vaddr - pt->start_vaddr) / PAGE_SIZE;
+    KASSERT(page_index < pt->size);
     KASSERT(pt->pages[page_index] == PT_UNPOPULATED_PAGE ||
             (pt->pages[page_index] & PT_SWAPPED_MASK) == PT_SWAPPED_PAGE);
     pt->pages[page_index] = paddr;
@@ -134,10 +138,12 @@ void pt_swap_out(struct pagetable *pt, off_t swapfile_offset, vaddr_t swapped_en
     KASSERT(swapped_entry >= pt->start_vaddr);
     KASSERT(swapped_entry < (pt->start_vaddr) + (pt->size * PAGE_SIZE));
 
-    /* See pt_get_entry() for more information */
-    unsigned long page_index = (swapped_entry - (pt->start_vaddr & PAGE_FRAME)) / PAGE_SIZE;
+    swapped_entry = swapped_entry & PAGE_FRAME;
+    unsigned long page_index = (swapped_entry - pt->start_vaddr) / PAGE_SIZE;
+    KASSERT(page_index < pt->size);
     KASSERT(pt->pages[page_index] != PT_UNPOPULATED_PAGE);
     KASSERT((pt->pages[page_index] & PT_SWAPPED_MASK) != PT_SWAPPED_PAGE);
+
     pt->pages[page_index] = ((paddr_t)swapfile_offset) | PT_SWAPPED_PAGE;
 }
 
@@ -153,8 +159,9 @@ off_t pt_get_swap_offset(struct pagetable *pt, vaddr_t vaddr)
     KASSERT(vaddr >= pt->start_vaddr);
     KASSERT(vaddr < (pt->start_vaddr) + (pt->size * PAGE_SIZE));
 
-    unsigned long page_index = (vaddr - (pt->start_vaddr & PAGE_FRAME)) / PAGE_SIZE;
-    
+    vaddr = vaddr & PAGE_FRAME;
+    unsigned long page_index = (vaddr - pt->start_vaddr) / PAGE_SIZE;
+    KASSERT(page_index < pt->size);    
     KASSERT((pt->pages[page_index] & PT_SWAPPED_MASK) == PT_SWAPPED_PAGE);
 
     return (off_t) (pt->pages[page_index] & (~PT_SWAPPED_MASK));

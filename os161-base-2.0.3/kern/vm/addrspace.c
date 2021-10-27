@@ -176,15 +176,12 @@ int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize, size_t
 	size_t npages;
 
 	KASSERT(as != NULL);
+	KASSERT(v != NULL);
 
-	/* Align the region. First, the base... */
-	memsize += vaddr & ~(vaddr_t)PAGE_FRAME;
-	vaddr &= PAGE_FRAME;
-
-	/* ...and now the length. */
-	memsize = (memsize + PAGE_SIZE - 1) & PAGE_FRAME;
-
-	npages = memsize / PAGE_SIZE;
+	/* Compute the length of the segment in number of pages */
+	npages = memsize + (vaddr & ~(vaddr_t)PAGE_FRAME);
+	npages = (npages + PAGE_SIZE - 1) & PAGE_FRAME;
+	npages = npages / PAGE_SIZE;
 
 	/*
 	 * readable 	100
@@ -198,7 +195,7 @@ int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize, size_t
 		{
 			return ENOMEM;
 		}
-		seg_define(as->seg1, vaddr, file_size, offset, npages, v, readable, writeable, executable);
+		seg_define(as->seg1, vaddr, file_size, offset, memsize, npages, v, readable, writeable, executable);
 		return 0;
 	}
 	if (as->seg2 == NULL)
@@ -208,7 +205,7 @@ int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize, size_t
 		{
 			return ENOMEM;
 		}
-		seg_define(as->seg2, vaddr, file_size, offset, npages, v, readable, writeable, executable);
+		seg_define(as->seg2, vaddr, file_size, offset, memsize, npages, v, readable, writeable, executable);
 		return 0;
 	}
 
@@ -277,6 +274,7 @@ int as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 }
 
 struct prog_segment* as_find_segment(struct addrspace *as, vaddr_t vaddr) {
+	
 	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
 	struct prog_segment *ps;
 
@@ -288,18 +286,61 @@ struct prog_segment* as_find_segment(struct addrspace *as, vaddr_t vaddr) {
     KASSERT(as->seg1->pagetable != NULL);
     KASSERT(as->seg2->pagetable != NULL);
     KASSERT(as->seg_stack->pagetable != NULL);
-    KASSERT((as->seg1->base_vaddr & PAGE_FRAME) == as->seg1->base_vaddr);
-    KASSERT((as->seg2->base_vaddr & PAGE_FRAME) == as->seg2->base_vaddr);
-    KASSERT((as->seg_stack->base_vaddr & PAGE_FRAME) == as->seg_stack->base_vaddr);
 
     /* 
      * Check if the fault address is within the boundaries of
      * the current address space
      */
     vbase1 = as->seg1->base_vaddr;
-    vtop1 = vbase1 + (as->seg1->n_pages) * PAGE_SIZE;
+    vtop1 = vbase1 + as->seg1->mem_size;
     vbase2 = as->seg2->base_vaddr;
-    vtop2 = vbase2 + (as->seg2->n_pages) * PAGE_SIZE;
+    vtop2 = vbase2 + as->seg2->mem_size;
+    stackbase = USERSTACK - SUCHVM_STACKPAGES * PAGE_SIZE;
+    stacktop = USERSTACK;
+    if (vaddr >= vbase1 && vaddr < vtop1)
+    {
+        ps = as->seg1;
+    }
+    else if (vaddr >= vbase2 && vaddr < vtop2)
+    {
+        ps = as->seg2;
+    }
+    else if (vaddr >= stackbase && vaddr < stacktop)
+    {
+        ps = as->seg_stack;
+    }
+    else
+    {
+        return NULL;
+    }
+
+	return ps;
+}
+
+/* Use it as little as possible, only when checks on precise
+ * boundaries of the passed address space are not available */
+struct prog_segment* as_find_segment_coarse(struct addrspace *as, vaddr_t vaddr) {
+	
+	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
+	struct prog_segment *ps;
+
+	/* Check if address space is fully populated */
+    KASSERT(as != NULL);
+    KASSERT(as->seg1 != NULL);
+    KASSERT(as->seg2 != NULL);
+    KASSERT(as->seg_stack != NULL);
+    KASSERT(as->seg1->pagetable != NULL);
+    KASSERT(as->seg2->pagetable != NULL);
+    KASSERT(as->seg_stack->pagetable != NULL);
+
+    /* 
+     * Check if the fault address is within the boundaries of
+     * the current address space (page granularity)
+     */
+    vbase1 = (as->seg1->base_vaddr & PAGE_FRAME);
+    vtop1 = vbase1 + (as->seg1->n_pages * PAGE_SIZE);
+    vbase2 = (as->seg2->base_vaddr & PAGE_FRAME);
+    vtop2 = vbase2 + (as->seg2->n_pages * PAGE_SIZE);
     stackbase = USERSTACK - SUCHVM_STACKPAGES * PAGE_SIZE;
     stacktop = USERSTACK;
     if (vaddr >= vbase1 && vaddr < vtop1)

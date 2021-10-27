@@ -69,9 +69,10 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
     uint32_t entry_hi, entry_lo;
     struct addrspace *as;
     struct prog_segment *ps;
+    vaddr_t page_aligned_faultaddress;
 
     /* Align virtual address to page beginning virtual address */
-    faultaddress &= PAGE_FRAME;
+    page_aligned_faultaddress = faultaddress & PAGE_FRAME;
 
     DEBUG(DB_VM, "suchvm: fault: 0x%x\n", faultaddress);
 
@@ -118,8 +119,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 
     /* 
      * Get the physical address of the received virtual address
-     * It also loads the page from disk if it was not in the page table
-     * and if it is not in a stack segment.
+     * from the page table
      */
     unpopulated = 0;
     paddr = seg_get_paddr(ps, faultaddress);
@@ -129,7 +129,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
         /* 
          * Alloc one page in coremap and add to page table
          */
-        paddr = alloc_upage(faultaddress);
+        paddr = alloc_upage(page_aligned_faultaddress);
         seg_add_pt_entry(ps, faultaddress, paddr);
         if (ps->permissions == PAGE_STACK)
         {
@@ -143,7 +143,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
          * Alloc one page in coremap swap in and update the page table 
          * (inside seg_swap_in())
          */
-        paddr = alloc_upage(faultaddress);
+        paddr = alloc_upage(page_aligned_faultaddress);
         seg_swap_in(ps, faultaddress, paddr);
     }
 
@@ -163,14 +163,14 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
     /* Disable interrupts on this CPU while frobbing the TLB. */
     spl = splhigh();
 
-    entry_hi = faultaddress;
+    entry_hi = page_aligned_faultaddress;
     entry_lo = paddr | TLBLO_VALID;
     /* If writes are permitted set the DIRTY bit (see tlb.h) */
     if (ps->permissions == PAGE_RW || ps->permissions == PAGE_STACK)
     {
         entry_lo = entry_lo | TLBLO_DIRTY;
     }
-    DEBUG(DB_VM, "suchvm: 0x%x -> 0x%x\n", faultaddress, paddr);
+    DEBUG(DB_VM, "suchvm: 0x%x -> 0x%x\n", page_aligned_faultaddress, paddr);
     tlb_write(entry_hi, entry_lo, tlb_index);
     splx(spl);
 
