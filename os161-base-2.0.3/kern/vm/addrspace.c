@@ -38,6 +38,7 @@
 #include <mips/tlb.h>
 #include <segments.h>
 #include <suchvm.h>
+#include <vmstats.h>
 
 struct addrspace *
 as_create(void)
@@ -138,6 +139,8 @@ void as_activate(void)
 	{
 		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
 	}
+	//TODO STATS TLB Invalidations
+	vmstats_inc(VMSTAT_TLB_INVALIDATE);
 
 	splx(spl);
 }

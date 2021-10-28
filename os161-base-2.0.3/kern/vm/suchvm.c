@@ -10,6 +10,7 @@
 #include <coremap.h>
 #include <segments.h>
 #include <swapfile.h>
+#include <vmstats.h>
 
 /* This index is used to perform round-robin entry replacement
  * in the TLB. It is not reset in the as_activate function because
@@ -26,6 +27,8 @@ static unsigned int tlb_get_rr_victim(void)
 {
     unsigned int victim;
     victim = current_victim;
+
+    
     current_victim = (current_victim + 1) % NUM_TLB;
     return victim;
 }
@@ -50,6 +53,7 @@ void vm_bootstrap(void)
 {
     coremap_init();
     swap_init();
+    vmstats_init();
     current_victim = 0;
 }
 
@@ -100,6 +104,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
         return EFAULT;
     }
 
+
     /* Get current running address space structure */
     as = proc_getas();
     if (as == NULL)
@@ -110,6 +115,9 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		 */
         return EFAULT;
     }
+
+    // TODO TLB faults
+    vmstats_inc(VMSTAT_TLB_FAULT);
 
     ps = as_find_segment(as, faultaddress);
     if (ps == NULL)
@@ -136,6 +144,8 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
             bzero((void *)PADDR_TO_KVADDR(paddr), PAGE_SIZE);
         }
         unpopulated = 1;
+
+    
     }
     else if (paddr == PT_SWAPPED_PAGE)
     {
@@ -145,6 +155,10 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
          */
         paddr = alloc_upage(page_aligned_faultaddress);
         seg_swap_in(ps, faultaddress, paddr);
+    }else{
+        /* Page already in the memory */
+        // TODO STATS TlB reloads
+        vmstats_inc(VMSTAT_TLB_RELOAD);
     }
 
     /* make sure it's page-aligned */
@@ -158,6 +172,10 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
         result = seg_load_page(ps, faultaddress, paddr);
         if (result)
             return EFAULT;
+
+        // TODO PAGE fault from ELF
+        vmstats_inc(VMSTAT_ELF_FILE_READ);
+
     }
 
     /* Disable interrupts on this CPU while frobbing the TLB. */
@@ -171,10 +189,32 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
         entry_lo = entry_lo | TLBLO_DIRTY;
     }
     DEBUG(DB_VM, "suchvm: 0x%x -> 0x%x\n", page_aligned_faultaddress, paddr);
+
+
+    /*
+     *      Check added for stats purposes
+     *        tlb_probe: look for an entry matching the virtual page in ENTRYHI.
+     *        Returns the index, or a negative number if no matching entry
+     *        was found. ENTRYLO is not actually used, but must be set; 0
+     *        should be passed
+     * 
+     */
+
+    // TODO STATS fault free and replace
+    if ( tlb_probe(entry_hi, 0) < 0){
+        vmstats_inc(VMSTAT_TLB_FAULT_FREE);
+    }else{
+        vmstats_inc(VMSTAT_TLB_FAULT_REPLACE);
+    }
+
     tlb_write(entry_hi, entry_lo, tlb_index);
     splx(spl);
 
     return 0;
+}
+
+void vm_shutdown(void){
+    vmstats_print();
 }
 
 void vm_tlbshootdown(const struct tlbshootdown *ts)

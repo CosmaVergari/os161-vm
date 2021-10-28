@@ -6,6 +6,7 @@
 #include <vm.h>
 #include <bitmap.h>
 #include <swapfile.h>
+#include <vmstats.h>
 
 #define SWAP_DEBUG 1 /* Does extra operations to ensure swap is zeroed and easy to debug */
 
@@ -97,6 +98,8 @@ int swap_out(paddr_t page_paddr, off_t *ret_offset)
     }
 
     *ret_offset = free_offset;
+
+    vmstats_inc(VMSTAT_SWAP_FILE_WRITE);
     return 0;
 }
 
@@ -127,6 +130,8 @@ int swap_in(paddr_t page_paddr, off_t swap_offset) {
     }
 
     bitmap_unmark(swapmap, swap_index);
+
+    vmstats_inc(VMSTAT_SWAP_FILE_READ);
     return 0;
 }
 
