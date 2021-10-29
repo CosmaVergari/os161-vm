@@ -69,8 +69,6 @@ void coremap_init(void)
  *  Search in freeRamFrames if there is a slot npages long
  *  of *freed* frames that can be occupied.
  */
-
-// TODO : controlla i parametri passati
 static paddr_t getfreeppages(unsigned long npages,
 							 unsigned char entry_type,
 							 struct addrspace *as,

@@ -212,7 +212,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 }
 
 void vm_shutdown(void){
-    // TODO: Ha senso tenerlo?
+    // TODO: Ha senso tenerlo? Forse sì per chiudere lo swap file?
     swap_shutdown();
     vmstats_print();
 }

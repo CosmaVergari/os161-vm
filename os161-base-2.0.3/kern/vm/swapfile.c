@@ -90,6 +90,7 @@ int swap_out(paddr_t page_paddr, off_t *ret_offset)
     if (result) {
         panic("swapfile.c : Not enough space in swapfile\n");
     }
+    spinlock_release(&swaplock);
 
     free_offset = free_index * PAGE_SIZE;
     KASSERT(free_offset < SWAPFILE_SIZE);
@@ -99,7 +100,6 @@ int swap_out(paddr_t page_paddr, off_t *ret_offset)
     if (u.uio_resid != 0) {
         panic("swapfile.c : Could not write to swapfile\n");
     }
-    spinlock_release(&swaplock);
 
     *ret_offset = free_offset;
 
@@ -127,6 +127,7 @@ int swap_in(paddr_t page_paddr, off_t swap_offset) {
     if (!bitmap_isset(swapmap, swap_index)) {
         panic("swapfile.c: Trying to access an unpopulated page in swapfile\n");
     }
+    spinlock_release(&swaplock);
 
     uio_kinit(&iov, &u, (void *) PADDR_TO_KVADDR(page_paddr), PAGE_SIZE, swap_offset, UIO_READ);
     VOP_READ(swapfile, &u);
@@ -134,8 +135,9 @@ int swap_in(paddr_t page_paddr, off_t swap_offset) {
         panic("swapfile.c : Could not read from swapfile addr %u\n", page_paddr);
     }
 
-    bitmap_unmark(swapmap, swap_index);
     spinlock_acquire(&swaplock);
+    bitmap_unmark(swapmap, swap_index);
+    spinlock_release(&swaplock);
 
     vmstats_inc(VMSTAT_SWAP_FILE_READ);
     vmstats_inc(VMSTAT_PAGE_FAULT_DISK);
