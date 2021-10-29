@@ -30,8 +30,8 @@
 #define VMSTAT_TLB_FAULT_REPLACE      2
 #define VMSTAT_TLB_INVALIDATE         3
 #define VMSTAT_TLB_RELOAD             4
-#define VMSTAT_PAGE_FAULT_ZERO        5
-#define VMSTAT_PAGE_FAULT_DISK        6
+#define VMSTAT_PAGE_FAULT_ZERO        5 // TODO
+#define VMSTAT_PAGE_FAULT_DISK        6 // TODO
 #define VMSTAT_ELF_FILE_READ          7
 #define VMSTAT_SWAP_FILE_READ         8
 #define VMSTAT_SWAP_FILE_WRITE        9
@@ -48,4 +48,4 @@ void vmstats_inc(unsigned int index);
 /* Print the statistics */
 void vmstats_print(void);
 
-#endif /* VM_STATS_H *
+#endif /* VM_STATS_H */

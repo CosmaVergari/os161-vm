@@ -8,6 +8,7 @@
 #include <vm.h>
 #include <swapfile.h>
 #include <segments.h>
+#include <vmstats.h>
 
 /*
  * Zero a physical memory region
@@ -272,6 +273,15 @@ int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
 
     /* Zero the **entire** page */
     zero_a_region(paddr, PAGE_SIZE);
+
+    if (read_len == 0) {
+        // TODO: Fault that causes an entire page to be zero filled
+        vmstats_inc(VMSTAT_PAGE_FAULT_ZERO);
+    } else {
+        // TODO PAGE fault from ELF (disk)
+        vmstats_inc(VMSTAT_ELF_FILE_READ);
+        vmstats_inc(VMSTAT_PAGE_FAULT_DISK);
+    }
 
     /* Treat the page as a physical address inside kernel address space and perform a read */
     uio_kinit(&iov, &u, (void *)PADDR_TO_KVADDR(dest_paddr), read_len, file_offset, UIO_READ);

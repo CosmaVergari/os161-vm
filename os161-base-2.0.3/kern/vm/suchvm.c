@@ -116,8 +116,6 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
         return EFAULT;
     }
 
-    // TODO TLB faults
-    vmstats_inc(VMSTAT_TLB_FAULT);
 
     ps = as_find_segment(as, faultaddress);
     if (ps == NULL)
@@ -142,10 +140,11 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
         if (ps->permissions == PAGE_STACK)
         {
             bzero((void *)PADDR_TO_KVADDR(paddr), PAGE_SIZE);
+
+            // TODO: Fault that causes a page to be zero filled
+            vmstats_inc(VMSTAT_PAGE_FAULT_ZERO);
         }
         unpopulated = 1;
-
-    
     }
     else if (paddr == PT_SWAPPED_PAGE)
     {
@@ -155,7 +154,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
          */
         paddr = alloc_upage(page_aligned_faultaddress);
         seg_swap_in(ps, faultaddress, paddr);
-    }else{
+    } else{
         /* Page already in the memory */
         // TODO STATS TlB reloads
         vmstats_inc(VMSTAT_TLB_RELOAD);
@@ -172,11 +171,10 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
         result = seg_load_page(ps, faultaddress, paddr);
         if (result)
             return EFAULT;
-
-        // TODO PAGE fault from ELF
-        vmstats_inc(VMSTAT_ELF_FILE_READ);
-
     }
+
+    // TODO TLB faults
+    vmstats_inc(VMSTAT_TLB_FAULT);
 
     /* Disable interrupts on this CPU while frobbing the TLB. */
     spl = splhigh();
@@ -214,6 +212,8 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 }
 
 void vm_shutdown(void){
+    // TODO: Ha senso tenerlo?
+    swap_shutdown();
     vmstats_print();
 }
 

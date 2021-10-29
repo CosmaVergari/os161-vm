@@ -8,9 +8,9 @@
 #include <swapfile.h>
 #include <vmstats.h>
 
-#define SWAP_DEBUG 1 /* Does extra operations to ensure swap is zeroed and easy to debug */
+#define SWAP_DEBUG 0 /* Does extra operations to ensure swap is zeroed and easy to debug */
 
-// TODO le funzioni di swap in e swap out vanno dichiarate dopo aver risolto i dubbi del readME
+static struct spinlock swaplock = SPINLOCK_INITIALIZER;
 
 /* 
  * Node handle in the file system  for the swapfile
@@ -33,11 +33,7 @@ static struct bitmap *swapmap;
 int swap_init(void)
 {
     int result;
-    char path[32], *zeroes;
-    struct uio u;
-    struct iovec iov;
-    off_t offset;
-    const size_t zeroes_size = 1024;
+    char path[32];
 
     strcpy(path, SWAPFILE_PATH);
     result = vfs_open(path, O_RDWR | O_CREAT, 0, &swapfile);
@@ -46,6 +42,12 @@ int swap_init(void)
     }
 
 #if SWAP_DEBUG
+    char *zeroes;
+    struct uio u;
+    struct iovec iov;
+    off_t offset;
+    const size_t zeroes_size = 1024;
+
     /* Fill swap file with zeroes to occupy SWAPFILE_SIZE bytes */
     zeroes = (char *) kmalloc(zeroes_size);
     bzero(zeroes, zeroes_size);
@@ -83,6 +85,7 @@ int swap_out(paddr_t page_paddr, off_t *ret_offset)
     KASSERT(page_paddr != 0);
     KASSERT((page_paddr & PAGE_FRAME) == page_paddr);
 
+    spinlock_acquire(&swaplock);
     result = bitmap_alloc(swapmap, &free_index);
     if (result) {
         panic("swapfile.c : Not enough space in swapfile\n");
@@ -96,6 +99,7 @@ int swap_out(paddr_t page_paddr, off_t *ret_offset)
     if (u.uio_resid != 0) {
         panic("swapfile.c : Could not write to swapfile\n");
     }
+    spinlock_release(&swaplock);
 
     *ret_offset = free_offset;
 
@@ -119,6 +123,7 @@ int swap_in(paddr_t page_paddr, off_t swap_offset) {
 
     swap_index = swap_offset / PAGE_SIZE;
 
+    spinlock_acquire(&swaplock);
     if (!bitmap_isset(swapmap, swap_index)) {
         panic("swapfile.c: Trying to access an unpopulated page in swapfile\n");
     }
@@ -130,8 +135,10 @@ int swap_in(paddr_t page_paddr, off_t swap_offset) {
     }
 
     bitmap_unmark(swapmap, swap_index);
+    spinlock_acquire(&swaplock);
 
     vmstats_inc(VMSTAT_SWAP_FILE_READ);
+    vmstats_inc(VMSTAT_PAGE_FAULT_DISK);
     return 0;
 }
 
@@ -147,10 +154,21 @@ void swap_free(off_t swap_offset) {
 
     swap_index = swap_offset / PAGE_SIZE;
 
+    spinlock_acquire(&swaplock);
     if (!bitmap_isset(swapmap, swap_index)) {
         panic("swapfile.c: Error: freeing an unpopulated page\n");
     }
 
     /* Leave the use of the page to some other program, no need to zero it */
     bitmap_unmark(swapmap, swap_index);
+    spinlock_release(&swaplock);
+}
+
+void swap_shutdown(void) {
+    KASSERT(swapfile != NULL);
+    KASSERT(swapmap != NULL);
+
+    // No process should be performing a swap operation at this point
+    vfs_close(swapfile);
+    bitmap_destroy(swapmap);
 }

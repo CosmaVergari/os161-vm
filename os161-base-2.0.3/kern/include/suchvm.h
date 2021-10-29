@@ -8,7 +8,5 @@
 #define SUCHVM_STACKPAGES 18
 
 void suchvm_can_sleep(void);
-void vm_bootstrap(void);
-void vm_shutdown(void):
 
 #endif

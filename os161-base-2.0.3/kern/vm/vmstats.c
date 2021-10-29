@@ -47,7 +47,6 @@ vmstats_inc(unsigned int index)
     spinlock_acquire(&stats_lock);
 
     KASSERT(index < VMSTAT_COUNT);
-    KASSERT(stats_counts[index] >= 0)
     stats_counts[index]++;
 
     spinlock_release(&stats_lock);
@@ -74,7 +73,6 @@ vmstats_print(void)
     int disk_reads = 0;
 
     for (i=0; i<VMSTAT_COUNT; i++) {
-        KASSERT(stats_counts[i] >= 0);
     }
 
     kprintf("VMSTATS:\n");
