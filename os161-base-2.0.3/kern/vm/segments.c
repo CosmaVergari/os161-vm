@@ -99,7 +99,6 @@ int seg_define_stack(struct prog_segment *ps, vaddr_t base_vaddr, size_t n_pages
     return 0;
 }
 
-
 int seg_prepare(struct prog_segment *ps)
 {
     KASSERT(ps != NULL);
@@ -224,12 +223,15 @@ int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
         voffset = (ps->n_pages - 1) * PAGE_SIZE - vbaseoffset;
         dest_paddr = paddr;
         file_offset = ps->file_offset + voffset;
-        if (ps -> file_size > voffset) {
+        if (ps->file_size > voffset)
+        {
             read_len = ps->file_size - voffset;
-        } else {
+        }
+        else
+        {
             read_len = 0;
             /* Required to pass the assertion below on file_offset */
-            file_offset = ps -> file_size;
+            file_offset = ps->file_size;
         }
     }
     else
@@ -255,14 +257,19 @@ int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
          * 
          * |00000000000xxxx|xxxxxxxxxxxzzzz|zzzzzz0000000000|
          */
-        if (ps -> file_size > ((page_index + 1) * PAGE_SIZE) - vbaseoffset) {
+        if (ps->file_size > ((page_index + 1) * PAGE_SIZE) - vbaseoffset)
+        {
             read_len = PAGE_SIZE;
-        } else if (ps -> file_size < (page_index * PAGE_SIZE) - vbaseoffset) {
+        }
+        else if (ps->file_size < (page_index * PAGE_SIZE) - vbaseoffset)
+        {
             read_len = 0;
             /* Required to pass the assertion below on file_offset */
             file_offset = ps->file_size;
-        } else {
-            read_len = ps -> file_size - ((page_index * PAGE_SIZE) - vbaseoffset);
+        }
+        else
+        {
+            read_len = ps->file_size - ((page_index * PAGE_SIZE) - vbaseoffset);
         }
     }
 
@@ -274,11 +281,13 @@ int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
     /* Zero the **entire** page */
     zero_a_region(paddr, PAGE_SIZE);
 
-    if (read_len == 0) {
-        // TODO: Fault that causes an entire page to be zero filled
+    /* Update stats */
+    if (read_len == 0)
+    {
         vmstats_inc(VMSTAT_PAGE_FAULT_ZERO);
-    } else {
-        // TODO PAGE fault from ELF (disk)
+    }
+    else
+    {
         vmstats_inc(VMSTAT_ELF_FILE_READ);
         vmstats_inc(VMSTAT_PAGE_FAULT_DISK);
     }

@@ -12,7 +12,7 @@ struct coremap_entry {
     unsigned char entry_type;
     unsigned long allocSize;
     unsigned long prev_allocated, next_allocated;
-    vaddr_t vaddr;          // TODO : controllare se tutti i campi sono realmente necessari
+    vaddr_t vaddr;
     struct addrspace *as;
 };
 

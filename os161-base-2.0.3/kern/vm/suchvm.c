@@ -90,7 +90,10 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 
     if (faulttype == VM_FAULT_READONLY)
     {
-        /* TODO: Must terminate the running process, EACCES is ok? */
+        /* 
+         * The process is always terminated when there is
+         * an error in the vm_fault.
+         */
         return EACCES;
     }
 
@@ -141,7 +144,6 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
         {
             bzero((void *)PADDR_TO_KVADDR(paddr), PAGE_SIZE);
 
-            // TODO: Fault that causes a page to be zero filled
             vmstats_inc(VMSTAT_PAGE_FAULT_ZERO);
         }
         unpopulated = 1;
@@ -156,7 +158,6 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
         seg_swap_in(ps, faultaddress, paddr);
     } else{
         /* Page already in the memory */
-        // TODO STATS TlB reloads
         vmstats_inc(VMSTAT_TLB_RELOAD);
     }
 
@@ -173,7 +174,6 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
             return EFAULT;
     }
 
-    // TODO TLB faults
     vmstats_inc(VMSTAT_TLB_FAULT);
 
     /* Disable interrupts on this CPU while frobbing the TLB. */
@@ -190,15 +190,13 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 
 
     /*
-     *      Check added for stats purposes
-     *        tlb_probe: look for an entry matching the virtual page in ENTRYHI.
-     *        Returns the index, or a negative number if no matching entry
-     *        was found. ENTRYLO is not actually used, but must be set; 0
-     *        should be passed
+     * Check added for stats purposes
+     * tlb_probe: look for an entry matching the virtual page in ENTRYHI.
+     * Returns the index, or a negative number if no matching entry
+     * was found. ENTRYLO is not actually used, but must be set; 0
+     * should be passed
      * 
      */
-
-    // TODO STATS fault free and replace
     if ( tlb_probe(entry_hi, 0) < 0){
         vmstats_inc(VMSTAT_TLB_FAULT_FREE);
     }else{
@@ -212,7 +210,6 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 }
 
 void vm_shutdown(void){
-    // TODO: Ha senso tenerlo? Forse sì per chiudere lo swap file?
     swap_shutdown();
     vmstats_print();
 }

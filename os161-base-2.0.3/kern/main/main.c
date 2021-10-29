@@ -100,8 +100,7 @@ boot(void)
 	kprintf("OS/161 base system version %s\n", BASE_VERSION);
 	kprintf("%s", harvard_copyright);
 	kprintf("\n");
-	//TODO write something here
-	kprintf("Put-your-group-name-here's system version %s (%s #%d)\n",
+	kprintf("Cosmos161 system version %s (%s #%d)\n",
 		GROUP_VERSION, buildconfig, buildversion);
 	kprintf("\n");
 

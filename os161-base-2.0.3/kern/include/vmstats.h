@@ -30,14 +30,13 @@
 #define VMSTAT_TLB_FAULT_REPLACE      2
 #define VMSTAT_TLB_INVALIDATE         3
 #define VMSTAT_TLB_RELOAD             4
-#define VMSTAT_PAGE_FAULT_ZERO        5 // TODO
-#define VMSTAT_PAGE_FAULT_DISK        6 // TODO
+#define VMSTAT_PAGE_FAULT_ZERO        5
+#define VMSTAT_PAGE_FAULT_DISK        6
 #define VMSTAT_ELF_FILE_READ          7
 #define VMSTAT_SWAP_FILE_READ         8
 #define VMSTAT_SWAP_FILE_WRITE        9
 #define VMSTAT_COUNT                  10
 
-/* ----------------------------------------------------------------------- */
 
 /* Initialize the statistics */
 void vmstats_init(void);

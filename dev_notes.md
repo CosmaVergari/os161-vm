@@ -177,8 +177,8 @@ Nota: free list al posto di tenere un array di pagine libere ed occupate nella c
 
 - Non si fa lo swap delle pagine del kernel
 
-- TODO: Rimandiamo caricare la prima pagina dell'entrypoint a dopo
-- TODO: Implementare la syscall exit per fare la destroy dell'address space del processo.
+- TODO: Rimandiamo caricare la prima pagina dell'entrypoint a dopo -> DONE
+- TODO: Implementare la syscall exit per fare la destroy dell'address space del processo. -> DONE
 
 - Address error on load?? quando chiama VOP_READ dopo aver allocato una pagina
 Definizione su os161 harvard sito: ADEL -- address error on load. An address error is either an unaligned access or an attempt to access kernel memory while in user mode. Software should respond by treating the condition as a failure. 
@@ -213,8 +213,8 @@ Soluzioni?
 - Mettere temporaneamente il RW in quella pagina finchè non la carica: far impostare la tlb alla funzione che carica la pagina (ma come?)
 - Caricare la pagina prima nel kernel e poi fare una memmove nell'indirizzo fisico che è già noto. -> SOLUZIONE ADOTTATA!
 
-TODO: Implementare syscall exit e swapping
-TODO: Spostare riferimento elf node in as (opzionale)
+TODO: Implementare syscall exit e swapping -> DONE
+TODO: Spostare riferimento elf node in as (opzionale) -> DONE ma spostato in prog_segment
 
 # 17/9/2021 Il paging funziona
 
@@ -328,10 +328,10 @@ Problema: huge non funziona: TLB miss on store quando cerca di scrivere in un'ar
 Questo è anticipato da un messaggio "segments.c - short read from file, truncated?". Bisogna debuggare vm_fault.
 
 Problema: file size non viene passata correttamente da load_elf a as_define region
-TODO: Passare il corretto file size
-TODO: Riempire di zeri le regioni di memoria con memsize > filesize
+TODO: Passare il corretto file size -> DONE
+TODO: Riempire di zeri le regioni di memoria con memsize > filesize -> DONE azzeriamo tutto prima di caricare da file
 
-TODO: Aggiornare documentazione seg_load_page
+TODO: Aggiornare documentazione seg_load_page -> TODO
 
 Problema: ci sono molti page fault sulle stesse pagine => Causato dalla syscall write che mentre scrive su console deschedula il processo e al ritorno chiama la thread_switch che svuota la tlb.
 
@@ -371,7 +371,7 @@ Capito il problema: dentro as_define_region allineavamo l'indirizzo virtuale all
 
 Per sistemare il problema non possiamo più avere una granularità della lunghezza di un segmento a livello n° di pagine ma a livello memsize, quindi dobbiamo cambiare la struttura segment per tenere traccia della memsize. 
 
-TODO: Dobbiamo rivedere anche il caricamento della pagina (seg_load_page)
+TODO: Dobbiamo rivedere anche il caricamento della pagina (seg_load_page) -> DONE
 
 Cambio page table per convertire gli indirizzi delle pagine in indici con indirizzi page-aligned
 Problema: nella funzione getppage_user quando viene fatto lo swap out, si determina il segmento della pagina *vittima* attraverso la funzione as_find_segment. Il problema è che la funzione as_find_segment vuole un indirizzo virtuale, noi lo prendiamo dalla coremap dove sono tutti page_aligned, e quindi se un segmento non ha un base_vaddr che è page_aligned (inizia a metà pagina) allora ritorna un errore. 
@@ -381,6 +381,6 @@ Soluzioni:
 - creare una funzione simile ad as_find_segment ma che controlla sulle pagine
 - salvare nella coremap i base_vaddr (Mi sembra una minchiata)
 
-TODO: Controllare se i limiti dichiarati dei segmenti si sovrappongono (e.g. grande segmento data che oltrepassa i limiti di stack)
+TODO: Controllare se i limiti dichiarati dei segmenti si sovrappongono (e.g. grande segmento data che oltrepassa i limiti di stack) -> TODO
 
 Gli overflow delle variabili passate da elf li controlliamo?
