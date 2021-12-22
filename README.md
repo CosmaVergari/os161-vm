@@ -4,8 +4,7 @@ author: Francesco Capano (s284739), Cosma Alex Vergari (s284922)
 date: Ciccio
 ---
 
-Strategia: spiegare approfonditamente come funziona il demand paging e swapping e mostrando quale componente implementa quella funzionalità. 
-Se c'è da precisare qualcosa su un componente si fa in un capitolo a parte.
+Strategia: Partire da come abbiamo implementato le singole classi, parlare dell'integrazione quando descriveremo suchvm.c, aggiornare i flow in alto aggiungendo informazioni che ci siamo ricordati descrivendo le classi.
 
 # Theorical introduction
 
@@ -114,13 +113,13 @@ There are 4 main functions inside the coremap module, that implement what we've 
 The reason why we only allocate 1 page for user processes is intrinsic to the idea of demand-paging, where each single page is requested one at a time from the file and only whenever needed.
 
 ## List of files created/modified
-- addrspace.c
-- coremap.c
-- pagetable.c
-- segments.c
-- suchvm.c
-- swapfile.c
-
+- addrspace.c  Francesco
+- pt.c Francesco
+- vmstats.c Francesco
+- coremap.c "Cosma"
+- segments.c Cosma
+- swapfile.c Cosma
+- suchvm.c (delayed)
 
 ## Statistics
 Describe what are the statistics about and how they are implemented
