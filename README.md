@@ -176,6 +176,31 @@ At this point, the frame is completely zeroed, and the `VOP_READ` operation is t
 ### Remaining functions
 The remaining functions declared in the segments.c file deal with the management of the `pagetable` struct, adding and getting entries from it, but also there are some functions dedicated to the support of the *swapping* operations, but we will see them in more detail while talking about the architecture of *swapping*.
 
+## swapfile
+In order to support the swapping operation we created a management class called `swapfile.c`. This file contains most of the logic supporting the I/O from the swap file. The swapfile is located at the root of the filesystem (named SWAPFILE) and it is 9MB in space. *NOTE: These definitions are available and configurable in `swapfile.h`*. The swapfile is itself divided in pages of `PAGE_SIZE` length, just like the RAM memory. This is useful because it eases the management of the swapfile, the tracking of the offset in the swapfile, and the I/O operations. 
+
+In order to manage the swapfile we used a bitmap that allows us to keep track of which swapfile *page* is free and which is filled, so it can't be used for swapping out at a given moment. Note also that the swapfile class is agnostic of which process occupies which page of the swapfile; this information is kept in the appropriate segment, and in particular in its **pagetable** (TODO: Aggiungi link a parte di pagetable in cui si parla dello swap)
+
+Whenever the virtual memory manager starts, the `swap_init()` function is called. This function prepares the swapfile class to perform the following swapping operations. Such preparation consists in opening the swapfile, saving its handle in a global variable `struct vnode *swapfile`, and creating a properly sized bitmap called `swapmap` with `SWAPFILE_SIZE/PAGE_SIZE` entries.
+
+The bitmap and its management methods were already implemented in the system in the `struct bitmap` data type, so we decided to use this structure.
+
+During a `swap_out()` operation:
+1. set the first available (zero) bit in the bitmap and retrieve its index
+2. initialize the data structures required by a disk write operation (physical address to read from, length to write, offset in the file)
+3. perform the disk write operation
+4. return the offset in the swapfile where the page has been swapped out (equal to *bitmap_free_index \* PAGE_SIZE*)
+
+Step (4) will be useful for the tracking of the swapped pages inside for a specific process. If operation (1) fails, so when it returns a non-zero value, then it means that there is not enough free space in RAM and in swapfile. At this point the kernel does not have any other way to save the page, so it panics.
+
+The `swap_in()` operation is the symmetrical of the `swap_out()`: given an offset in the swapfile, it reads from the swapfile and resets the bit in the `swapmap`.
+
+Another available operation is the `swap_free()`. This function is used when a process that had some swapped out pages is exiting. Under this circumstances, every page that was swapped out becomes unused, so the `swapmap` has to be updated to make these pages available for other processes. No actual disk operation needs to be performed in this case, since the resetting of the bitmap is enough to make the pages usable by others again.
+
+Every operation on the `swapmap` is performed under the ownership of a lock (`struct spinlock swaplock`) to prevent race condition between processors. This is redundant since for now we are in a single-processor architecture.
+
+Finally, the `swap_shutdown()` is invoked at memory management shutdown and it frees the used resources: close the swapfile handle and free the space used by the `swapmap`.
+
 
 ## List of files created/modified
 - addrspace.c  Francesco
