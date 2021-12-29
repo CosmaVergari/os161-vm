@@ -201,6 +201,187 @@ Every operation on the `swapmap` is performed under the ownership of a lock (`st
 
 Finally, the `swap_shutdown()` is invoked at memory management shutdown and it frees the used resources: close the swapfile handle and free the space used by the `swapmap`.
 
+# suchvm
+
+This is the class where most of the pieces come together, it contains:
+
+1. the VM bootstrap and shutdown procedures executed at boot and poweroff time
+2. the **high-level management of a page fault**
+3. the implementation of the round-robin **TLB replacement algorithm**
+
+## VM initialization
+
+Let's start with point (1). There are 2 functions that are involved: `vm_bootstrap()` and `vm_shutdown()`.
+
+TODO: Update the links
+TODO: Add in shutdown the deallocation of coremap
+
+`vm_bootstrap()` is the VM bootstrap function and it contains the necessary initialization to make the VM work. This consists in the initialization of the [`coremap` class](#coremap), of the [`swap` class](#swapfile), of the [`vmstats` class](#vmstatsTODO) used for statistics and of the [TLB replacement algorithm](#tlb-replacement-algorithm). This function is called by `boot()` in *kern/main/main.c*, that contains the initialization sequence of the kernel.
+
+On the other hand, `vm_shutdown()` is the VM shutdown function and it is the specular of the bootstrap, containing the functions deallocating the resources used by the VM. This function is called by the `shutdown()` function also defined in *kern/main/main.c*, that gets executed when the machine is powering off.
+
+## Management of a page fault
+
+It is implemented in the function `vm_fault()`. This function is directly called by the interrupt handler `mips_trap()` whenever the code of the interrupt assumes one of the following values (defined in *arch/mips/include/trapframe.h*): 
+
+* `EX_MOD` : attempted to write in a read-only page
+* `EX_TLBL` : TLB miss on load
+* `EX_TLBS` : TLB miss on store
+
+These values have a corresponding *#define* constant in *vm.h*. Respectively: `VM_FAULT_READONLY`, `VM_FAULT_READ`, `VM_FAULT_WRITE` are the possible values that the first parameter of `vm_fault` (`int faulttype`) can assume. This parameter is required because it produces different behaviour in the function.
+
+The `vm_fault()` function closely resembles the theoretical flow of operations that we discussed in the first section ([Flow of page loading from TLB fault](#flow-of-page-loading-from-tlb-fault)). Let's now comment the `vm_fault()` function step by step:
+
+```C
+int vm_fault(int faulttype, vaddr_t faultaddress)
+{
+    unsigned int tlb_index;
+    int spl, result;
+    char unpopulated;
+    paddr_t paddr;
+    uint32_t entry_hi, entry_lo;
+    struct addrspace *as;
+    struct prog_segment *ps;
+    vaddr_t page_aligned_faultaddress;
+
+    page_aligned_faultaddress = faultaddress & PAGE_FRAME;
+
+    if (faulttype != VM_FAULT_READONLY &&
+        faulttype != VM_FAULT_READ &&
+        faulttype != VM_FAULT_WRITE)
+    {
+        return EINVAL;
+    }
+
+    if (faulttype == VM_FAULT_READONLY)
+    {
+        return EACCES;
+    }
+```
+In this first section we can see the prototype of the function, that accepts the fault type and the `faultaddress` parameters. The second parameter tells which is the **virtual address** inside the currently running process that caused this specific page fault.
+
+We then declare some variables that will be used later on together with a *page-aligned* version of the faulting virtual address. We then check if `faulttype` has some illegal value and return an error in that case. We also check if the fault happened because a write on a read-only page has been performed. If that is the case we return the `EACCES` error, that is defined in *errno.h* as a *Permission Denied* error.
+
+In this latter case we want the calling process to terminate, as required by the project text. This is already done by default when returning an error from `vm_fault()`. To confirm this we can take a look at `mips_trap()` when calls `vm_fault()` and we can see that whenever `vm_fault()` returns a non-zero value (i.e. an error), and we are coming from code running in *user mode*, then the kernel executes a `kill_curthread()` on the thread/process that raised the exception.
+
+```C
+    if (curproc == NULL)
+    {
+        /*
+		 * No process. This is probably a kernel fault early
+		 * in boot. Return EFAULT so as to panic instead of
+		 * getting into an infinite faulting loop.
+		 */
+        return EFAULT;
+    }
+
+
+    /* Get current running address space structure */
+    as = proc_getas();
+    if (as == NULL)
+    {
+        /*
+		 * No address space set up. This is probably also a
+		 * kernel fault early in boot.
+		 */
+        return EFAULT;
+    }
+
+
+    ps = as_find_segment(as, faultaddress);
+    if (ps == NULL)
+    {
+        return EFAULT;
+    }
+```
+
+```C
+    /* 
+     * Get the physical address of the received virtual address
+     * from the page table
+     */
+    unpopulated = 0;
+    paddr = seg_get_paddr(ps, faultaddress);
+
+    if (paddr == PT_UNPOPULATED_PAGE)
+    {
+        /* 
+         * Alloc one page in coremap and add to page table
+         */
+        paddr = alloc_upage(page_aligned_faultaddress);
+        seg_add_pt_entry(ps, faultaddress, paddr);
+        if (ps->permissions == PAGE_STACK)
+        {
+            bzero((void *)PADDR_TO_KVADDR(paddr), PAGE_SIZE);
+
+            vmstats_inc(VMSTAT_PAGE_FAULT_ZERO);
+        }
+        unpopulated = 1;
+    }
+    else if (paddr == PT_SWAPPED_PAGE)
+    {
+        /* 
+         * Alloc one page in coremap swap in and update the page table 
+         * (inside seg_swap_in())
+         */
+        paddr = alloc_upage(page_aligned_faultaddress);
+        seg_swap_in(ps, faultaddress, paddr);
+    } else{
+        /* Page already in the memory */
+        vmstats_inc(VMSTAT_TLB_RELOAD);
+    }
+
+    /* make sure it's page-aligned */
+    KASSERT((paddr & PAGE_FRAME) == paddr);
+
+    tlb_index = tlb_get_rr_victim();
+
+    if (ps->permissions != PAGE_STACK && unpopulated)
+    {
+        /* Load page from file*/
+        result = seg_load_page(ps, faultaddress, paddr);
+        if (result)
+            return EFAULT;
+    }
+
+    vmstats_inc(VMSTAT_TLB_FAULT);
+
+    /* Disable interrupts on this CPU while frobbing the TLB. */
+    spl = splhigh();
+
+    entry_hi = page_aligned_faultaddress;
+    entry_lo = paddr | TLBLO_VALID;
+    /* If writes are permitted set the DIRTY bit (see tlb.h) */
+    if (ps->permissions == PAGE_RW || ps->permissions == PAGE_STACK)
+    {
+        entry_lo = entry_lo | TLBLO_DIRTY;
+    }
+    DEBUG(DB_VM, "suchvm: 0x%x -> 0x%x\n", page_aligned_faultaddress, paddr);
+
+
+    /*
+     * Check added for stats purposes
+     * tlb_probe: look for an entry matching the virtual page in ENTRYHI.
+     * Returns the index, or a negative number if no matching entry
+     * was found. ENTRYLO is not actually used, but must be set; 0
+     * should be passed
+     * 
+     */
+    if ( tlb_probe(entry_hi, 0) < 0){
+        vmstats_inc(VMSTAT_TLB_FAULT_FREE);
+    }else{
+        vmstats_inc(VMSTAT_TLB_FAULT_REPLACE);
+    }
+
+    tlb_write(entry_hi, entry_lo, tlb_index);
+    splx(spl);
+
+    return 0;
+}
+```
+
+
+
 
 ## List of files created/modified
 - addrspace.c  Francesco

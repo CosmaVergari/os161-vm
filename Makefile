@@ -26,3 +26,7 @@ justdebug:
 run:
 	cd root && \
 	sys161 kernel-SUCHVM
+
+pdf:
+	pandoc README.md -o ../report.pdf
+	evince ../report.pdf
