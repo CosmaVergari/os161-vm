@@ -146,7 +146,7 @@ load_segment(struct addrspace *as, struct vnode *v,
 
 	return result;
 }
-#endif 	/* OPT_SUCHVM */
+#endif 	/* ifndef OPT_SUCHVM */
 
 /*
  * Load an ELF executable user program into the current address space.
