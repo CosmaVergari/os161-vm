@@ -432,7 +432,6 @@ In case (3), the memory manager doesn't need to perform any other operation, the
 }
 ```
 
-<<<<<<< HEAD
 This portion of code is dedicated to the TLB management now that the logical -> physical translation is available. First of all we get the index of the TLB entry where we should save the next entry using the `tlb_get_rr_victim()` function, that implements a Round-Robin algorithm to actually compute the index. This function looks like:
 
 ```C
@@ -454,7 +453,6 @@ In `entry_hi` we save the *page-aligned* virtual address that caused the page fa
 To be more precise, by default a page has read access, the write access is instead granted by setting the bit at position `TLBLO_DIRTY`. This is done according to what are the permissions specified in the faulting *segment*. In our case the types of segments that needed write access are a data segment tagged as `PAGE_RW` and a stack segment tagged as `PAGE_STACK`.
 
 We then perform a check if the victim TLB entry was valid or not to update the relative statistics. Finally we save the two entries in the TLB at the index obtained before and reenable interrupts.
-=======
 ## addrspace
 The address space of a program che be represented as a collection of segments, in particular in os161 they are usually three , the code segment, the date segment and the stack segment. From this the decision using the address space structure as a contanier for the three segments structure, as shown below. 
 
@@ -508,7 +506,6 @@ In doing so when the swapped page is request is possible to retrieve directly th
 Other basic functions performed at page level by the page table are add and entry ( function `void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)`)to the table and get an entry ( `void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)`), using the trivial conversion described before. It has been implemented also the function `void pt_swap_in(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)` that is a wraper for the `calls pt_add_entry` function, when the page to be added is a swapped page.
 
 For operation at the table level are used `pt_copy` to copy the entire struct, `pt_destroy` to destroy the struct and `pt_free` to free all the page saved in memory, in case there is a swapped entry, `swap_free` is called to invalidate the entry in the swapfile.
->>>>>>> f539ee7354801bf185baf7f0863be1bb989aeef0
 
 
 ## List of files created/modified
