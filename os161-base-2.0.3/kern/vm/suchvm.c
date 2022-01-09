@@ -164,8 +164,6 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
     /* make sure it's page-aligned */
     KASSERT((paddr & PAGE_FRAME) == paddr);
 
-    tlb_index = tlb_get_rr_victim();
-
     if (ps->permissions != PAGE_STACK && unpopulated)
     {
         /* Load page from file*/
@@ -178,6 +176,9 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 
     /* Disable interrupts on this CPU while frobbing the TLB. */
     spl = splhigh();
+
+    tlb_index = tlb_get_rr_victim();
+
 
     entry_hi = page_aligned_faultaddress;
     entry_lo = paddr | TLBLO_VALID;
