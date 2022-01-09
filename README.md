@@ -6,6 +6,7 @@ date: Ciccio
 
 Strategia: Partire da come abbiamo implementato le singole classi, parlare dell'integrazione quando descriveremo suchvm.c, aggiornare i flow in alto aggiungendo informazioni che ci siamo ricordati descrivendo le classi.
 
+
 # Theorical introduction
 
 This is an implementation of the project 1 by G. Cabodi. It implements demand paging, swapping and provides statistics on the performance of the virtual memory manager. It completely replaces DUMBVM.
@@ -13,7 +14,7 @@ This is an implementation of the project 1 by G. Cabodi. It implements demand pa
 ## On-demand paging
 The memory is divided in pages (hence paging) and frames. Pages are indexed by a virtual address and each of them has a physical frame assigned.
 
-The on-demand paging technique creates this correspondence page by page and only when a page is needed by a process. This event is triggered by the TLB.
+The on-demand paging technique creates this correspondence page by page and when a page is needed by a process. This event is triggered by the TLB.
 
 # os161 process implementation
 
@@ -23,9 +24,18 @@ Per descrivere come os161 runna i processi e dove siamo intervenuti noi. Rimanda
 
 ### Running a user program 
 The normal flow of operation of os161 starting a user program is started from the menu where is activated the subsequent chain of calls :
-cmd_prog -> common_prog -> proc_create_program ( create user process ) -> thread_fork --(execute)--> cmd_progthread -> runprogramm -> loadelf -> enter new process
+* `cmd_prog` 
+* `common_prog` 
+* `proc_create_program` ( create user process ) 
+* `thread_fork` 
+* `cmd_progthread` 
+* `runprogramm` 
+* `loadelf` 
+* `enter_new_process`
 
-The part analized and modified are the ones regarding runprogramm and loadelf. In particular runprogramm is used to open the file, to create and activate the new address space and to load the executable ( through loadelf ). 
+> OLD VERSION
+
+The part analized and modified are the ones regarding `runprogramm` and `loadelf`. In particular runprogramm is used to open the file, to create and activate the new address space and to load the executable ( through loadelf ). 
 Our fixings consist of :
 - in the address space activation the whole TLB is invalidated
 - the file is not loaded in memory but there is only a set up of the needed structure for the user programm managent
@@ -67,6 +77,31 @@ Our fixings consist of :
     - tlb writing
         - in case tlb is full, is applied roud_robin for replacin
 
+***
+
+> NEW VERSION
+
+The part analized and modified are the ones regarding `runprogram`,`loadelf` and the TLB invalidation process in the context swith. The latter is performed in `as_destroy`
+
+### runprogram
+In `runprogram` the program file is opened using `vfs_open`, and then a new address space is created and activated ( using `as_create` and `as_activate`). The file is loaded in memory using the `load_elf` function and at the end the user stack is defined through `as_define_stack`and the new process is entered ( `enter_new_process` ). The major fix to this function is that to allow the on demand paging the program file has to be opened during the whole execution of the program and so there is no call no `vfs_close` that will be executed only when the program terminates its execution ( in `as_destroy`).
+
+### loadelf
+The `load_elf` function was used to load the entire file in the memory, but following the policy of the on demand paging there is no need to do that. Our solution does not use the function `load_segment` in the loadelf.c file to load the segments in memory but simply reads the executable header and define the regions of the address space using `as_define_region` and prepare it through `as_prepare_load`. The function returns the entrypoint that will be used to start the process.
+
+### Flow of page loading from TLB fault
+- TLB miss
+- vm_fault in suchvm.c
+    - get_as
+    - find segment of that as
+    - try to get the physical address to the current fault virtual address
+    - alloc one page in coremap and save it into the pagetable (if it has already a correspondance in the coremap only write that correspondance in the page table)
+        - alloc_upage
+        - seg_add_pt_entry or in case of swap seg_swap_in
+    - load page from file
+        - seg_load_page
+    - tlb writing
+        - in case tlb is full, is applied roud_robin for replacin
 
 
 # Implementation
@@ -390,9 +425,9 @@ struct addrspace {
     struct prog_segment *seg_stack;     /* stack segment */
 };
 ```
-In order to manage the address space are created function to create (`as_create`) and allocate the structure, to copy ( `as_copy`) and destroy (`as_destroy`)the address space. In particular is worth to mention the `as_destroy` function becaude the data structured is destroyed oly when the program has terminated, and so since the we are working in the on demand paging setup there is the need to close the program file with `vfs_close`. 
+In order to manage the address space are created function to create (`as_create`) and allocate the structure, to copy ( `as_copy`) and destroy (`as_destroy`)the address space. In particular is worth to mention the `as_destroy` function because the data structure is destroyed only when the program has terminated, and so since the we are working in the on demand paging setup there is the need to close the program file with `vfs_close`. 
 
-Strictly correlated are `as_prepare_load` to prepare the segments involved ( call `seg_prepare`) and the function `as_define_region` since ther are involved in the segment initialization and set up. In particular the latter calls `seg_create` and `seg_define` for each segment, passing to the secon the proper number of pages needed for that region. There is also the implementation of `as_define_stack`, that is used for the stack region in an equivalent manner as for the others two regions. In particular since the stack in os161 the stack grows downwards from 0x80000000 (`USERSTACK`) and the base address ( the minimun ) is needed, it is computed in this way :
+Strictly correlated are `as_prepare_load` to prepare the segments involved ( call `seg_prepare`) and the function `as_define_region` since there are involved in the segment initialization and set up. In particular the latter computes the number of pages needed for the region and calls `seg_create` and `seg_define` for each segment. There is also the implementation of `as_define_stack`, that is used for the stack region in an equivalent manner as for the others two regions. In particular since the stack in os161 the stack grows downwards from 0x80000000 (`USERSTACK`) and the base address ( the minimun ) is needed, it is computed in this way :
 ```C
 USERSTACK - (SUCHVM_STACKPAGES * PAGE_SIZE)
 ```
@@ -434,8 +469,6 @@ Other basic functions performed at page level by the page table are add and entr
 
 For operation at the table level are used `pt_copy` to copy the entire struct, `pt_destroy` to destroy the struct and `pt_free` to free all the page saved in memory, in case there is a swapped entry, `swap_free` is called to invalidate the entry in the swapfile.
 
-## LoadELF
-The function // TODO loadELF
 
 ## List of files created/modified
 - addrspace.c  Francesco
@@ -446,7 +479,6 @@ The function // TODO loadELF
 - swapfile.c Cosma
 - suchvm.c (delayed)
 
-TODO dire cosa e' cambiato nella loadelf
 
 ## Statistics
 In order to compute the stats on page faults and the swap it is used an array of counter, `stats_counts[]`, and for each index is created a constant reported below 
@@ -463,7 +495,7 @@ In order to compute the stats on page faults and the swap it is used an array of
 #define VMSTAT_SWAP_FILE_WRITE        9
 ```
 To access to the stats and modify the array is needed a spinlock (`stats_lock`) to ensure atomicity of the operation, except for the time when the stats are showed by `vmstats_print` at the shutdown when the atomicity is ensured by no process running. In this function, also the following checks are fulfilled :
-```
+```C
 TLB Faults = TLB Faults with Free + TLB Faults with Replace 
 
 TLB Faults = TLB Reloads + Page Faults (Zeroed) + Page Faults (Disk)
