@@ -295,6 +295,12 @@ In this latter case we want the calling process to terminate, as required by the
     }
 ```
 
+At this point we check if the fault has been caused by a process, whose reference is contained in the global variable `curproc = curthread->t_proc`. If it has not been caused by a process it means that it happened inside the kernel at boot time. This fault is going to become a kernel panic in `mips_trap()`.
+
+We perform a further check if the **address space** of the current process has been setup, which should have definetely have happened by now. If this is not the case, return an `EFAULT` error.
+
+Finally, we try to distinguish which **segment** of the running process is the segment interested by the fault. If this fails, either the address is out of the declared segments ranges, or the address space has not been properly setup. Either way, we return an `EFAULT` error.
+
 ```C
     /* 
      * Get the physical address of the received virtual address
@@ -334,8 +340,6 @@ In this latter case we want the calling process to terminate, as required by the
     /* make sure it's page-aligned */
     KASSERT((paddr & PAGE_FRAME) == paddr);
 
-    tlb_index = tlb_get_rr_victim();
-
     if (ps->permissions != PAGE_STACK && unpopulated)
     {
         /* Load page from file*/
@@ -344,10 +348,32 @@ In this latter case we want the calling process to terminate, as required by the
             return EFAULT;
     }
 
-    vmstats_inc(VMSTAT_TLB_FAULT);
+```
 
+Now the VM checks if the appropriate segment contains already a logical->physical address translation for the requested logical address. This is done by looking up in the **page table** maintained by each segment. The following cases may happen:
+
+1. The page has never been accessed before (`pt == PT_UNPOPULATED_PAGE`)
+2. The page has been swapped out in the past and now it is required back by the process (`pt == PT_SWAPPED_PAGE`)
+3. The page is resident in memory and the translation to the physical address has been returned from the page table.
+
+In case (1), the memory manager needs to:
+* allocate a free physical frame to the process, this is done by the function `alloc_upage()` defined in [`coremap.c`](#coremap); its physical address is held in `paddr`
+* memorize the physical address of the allocated page in the page table of the correct segment
+* distinguish if it is a *stack* page or a *code/data* page. If it is in a *code/data* segment flag it as `unpopulated` which will cause below in the code to be **loaded from file**, if it is in a *stack* segment just fill it with zeroes.
+
+In case (2), the memory manager needs to:
+* allocate a free physical frame to the process, this is done by the function `alloc_upage()` defined in [`coremap.c`](#coremap); its physical address is held in `paddr`
+* perform a swap in the requesting segment. This is analyzed in the [swapping section](#swapping)
+<!-- TODO: Check link -->
+
+In case (3), the memory manager doesn't need to perform any other operation, the physical address is already available in the variable `paddr` returned from the page table and the physical frame is already filled with the correct data.
+
+```C
+    vmstats_inc(VMSTAT_TLB_FAULT);
     /* Disable interrupts on this CPU while frobbing the TLB. */
     spl = splhigh();
+
+    tlb_index = tlb_get_rr_victim();
 
     entry_hi = page_aligned_faultaddress;
     entry_lo = paddr | TLBLO_VALID;
@@ -358,15 +384,6 @@ In this latter case we want the calling process to terminate, as required by the
     }
     DEBUG(DB_VM, "suchvm: 0x%x -> 0x%x\n", page_aligned_faultaddress, paddr);
 
-
-    /*
-     * Check added for stats purposes
-     * tlb_probe: look for an entry matching the virtual page in ENTRYHI.
-     * Returns the index, or a negative number if no matching entry
-     * was found. ENTRYLO is not actually used, but must be set; 0
-     * should be passed
-     * 
-     */
     if ( tlb_probe(entry_hi, 0) < 0){
         vmstats_inc(VMSTAT_TLB_FAULT_FREE);
     }else{
@@ -380,7 +397,27 @@ In this latter case we want the calling process to terminate, as required by the
 }
 ```
 
+This portion of code is dedicated to the TLB management now that the logical -> physical translation is available. First of all we get the index of the TLB entry where we should save the next entry using the `tlb_get_rr_victim()` function, that implements a Round-Robin algorithm to actually compute the index. This function looks like:
 
+```C
+    unsigned int victim = current_victim;
+    current_victim = (current_victim + 1) % NUM_TLB;
+    return victim;
+```
+
+Basically it retrieves the index from a global variable called `current_victim` and increments the index by 1 while capping it at the size of the TLB. The saved index is then returned to be used. The modular increment operation is what ensures a Round-Robin operation.
+
+Even when the TLB is invalidated at some point by an `as_activate` run after a thread switch for example, the `current_victim` variable does not need to be reset, the entries will simply be saved starting from a middle point of the TLB.
+
+This function together with the rest of the TLB accesses is run after *disabling the CPU interrupts* (`splhigh`). This is because the function accesses a global variable and to avoid race conditions on the TLB entries. 
+
+Let's talk about how the address are saved in the TLB. Looking at the specifications of the TLB for this architecture, each entry is divided in two parts (`entry_hi` and `entry_lo`).
+
+In `entry_hi` we save the *page-aligned* virtual address that caused the page fault. In `entry_lo` we save the *page-aligned* physical address of the frame that has been allocated to hold the faulting page. Moreover we need to set the bit at position `TLBLO_VALID` bit to tell the TLB that the translation is valid. In the `entry_lo` part also the R/W permission on the page are specified.
+
+To be more precise, by default a page has read access, the write access is instead granted by setting the bit at position `TLBLO_DIRTY`. This is done according to what are the permissions specified in the faulting *segment*. In our case the types of segments that needed write access are a data segment tagged as `PAGE_RW` and a stack segment tagged as `PAGE_STACK`.
+
+We then perform a check if the victim TLB entry was valid or not to update the relative statistics. Finally we save the two entries in the TLB at the index obtained before and reenable interrupts.
 
 
 ## List of files created/modified
