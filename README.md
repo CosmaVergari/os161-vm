@@ -81,7 +81,7 @@ Our fixings consist of :
 
 > NEW VERSION
 
-The part analized and modified are the ones regarding `runprogram`,`loadelf` and the TLB invalidation process in the context swith. The latter is performed in `as_destroy`
+The part analized and modified are the ones regarding `runprogram`,`loadelf` and the TLB invalidation process in the context switch. The latter is performed in `as_destroy`.
 
 ### runprogram
 In `runprogram` the program file is opened using `vfs_open`, and then a new address space is created and activated ( using `as_create` and `as_activate`). The file is loaded in memory using the `load_elf` function and at the end the user stack is defined through `as_define_stack`and the new process is entered ( `enter_new_process` ). The major fix to this function is that to allow the on demand paging the program file has to be opened during the whole execution of the program and so there is no call no `vfs_close` that will be executed only when the program terminates its execution ( in `as_destroy`).
@@ -453,6 +453,7 @@ In `entry_hi` we save the *page-aligned* virtual address that caused the page fa
 To be more precise, by default a page has read access, the write access is instead granted by setting the bit at position `TLBLO_DIRTY`. This is done according to what are the permissions specified in the faulting *segment*. In our case the types of segments that needed write access are a data segment tagged as `PAGE_RW` and a stack segment tagged as `PAGE_STACK`.
 
 We then perform a check if the victim TLB entry was valid or not to update the relative statistics. Finally we save the two entries in the TLB at the index obtained before and reenable interrupts.
+
 ## addrspace
 The address space of a program che be represented as a collection of segments, in particular in os161 they are usually three , the code segment, the date segment and the stack segment. From this the decision using the address space structure as a contanier for the three segments structure, as shown below. 
 
@@ -471,7 +472,13 @@ USERSTACK - (SUCHVM_STACKPAGES * PAGE_SIZE)
 ```
 Then to the stack pointer is assigned the value `USERSTACK`.
 
-Concerning the operational phases, the most important functions are the one to activate the address space at each context switch and the one to locate the proper segments in which the system needs to executes the operations ( such as writing or reading from the page table ). The function `as_activate` is used to activate the address space, and in particular it invalidates all the tlb entries because it is shared among all the processes and so it needs to be cleaned. At the beginning of this function is checked if the current address space is null, in this way when a kernel thread is running there is no tlb invalidation. The function `as_find_segment` is used to retrieve the proper segment inside and address space where the required address is located. It checks that the virtual address passed is inside the boundaries of the current adress space. There are 2 versions of this function, the first called `as_find_segment`, finds the segment by precisely checking if `vaddr` is between the start and the end address (defined as `base_vaddr + mem_size`) of one of the segments, and the second `as_find_segment_coarse` finds the segment by checking if vaddr is between the **page-aligned** virtual address start and end (defined as `base_vaddr + n_pages * PAGE_SIZE`) of one of the segments. The second one is used in the swap out operation since the address requested is the one from the coremap and it is page aligned. The problem arise since the real boundaries of any segment is not page aligned .
+Concerning the operational phases, the most important functions are the one to activate the address space at each context switch and the one to locate the proper segments in which the system needs to executes the operations ( such as writing or reading from the page table ). 
+
+The function `as_activate` is used to activate the address space, and in particular it invalidates all the tlb entries because it is shared among all the processes and so it needs to be cleaned. At the beginning of this function is checked if the current address space is null, in this way when a kernel thread is running there is no tlb invalidation. 
+
+The function `as_find_segment` is used to retrieve the proper segment inside and address space where the required address is located. It checks that the virtual address passed is inside the boundaries of the current adress space. There are 2 versions of this function, the first called `as_find_segment`, finds the segment by precisely checking if `vaddr` is between the start and the end address (defined as `base_vaddr + mem_size`) of one of the segments, and the second `as_find_segment_coarse` finds the segment by checking if vaddr is between the **page-aligned** virtual address start and end (defined as `base_vaddr + n_pages * PAGE_SIZE`) of one of the segments. 
+
+The second one is used in the swap out operation since the address requested is the one from the coremap and it is page aligned. The problem arise since the real boundaries of any segment is not page aligned .
 
 
 ## Page table
