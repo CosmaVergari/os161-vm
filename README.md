@@ -18,10 +18,6 @@ The on-demand paging technique creates this correspondence page by page and when
 
 # os161 process implementation
 
-
-Per descrivere come os161 runna i processi e dove siamo intervenuti noi. Rimanda ai capitoli di addressed problems.
-
-
 ### Running a user program 
 The normal flow of operation of os161 starting a user program is started from the menu where is activated the subsequent chain of calls :
 * `cmd_prog` 
@@ -33,54 +29,6 @@ The normal flow of operation of os161 starting a user program is started from th
 * `loadelf` 
 * `enter_new_process`
 
-> OLD VERSION
-
-The part analized and modified are the ones regarding `runprogramm` and `loadelf`. In particular runprogramm is used to open the file, to create and activate the new address space and to load the executable ( through loadelf ). 
-Our fixings consist of :
-- in the address space activation the whole TLB is invalidated
-- the file is not loaded in memory but there is only a set up of the needed structure for the user programm managent
-- the file is not closed because it will be needed during the programm execution to load required part from memory
-
-
-### Flow of runprogramm 
-- Passed progname as parameter
-- Open the file ( vfs_open)
-- create new address space ( as_create )
-- switch to it and activate it ( proc_setas, as_activate )
-- load the executable ( loadelf )
-- close the file ( vfs_close)   // removed because of on demand paging
-- define user stack ( as_define_stack)
-- warp to user mode calling **enter_new_process**
-
-
-### Fix during the process loading
-- runprogramm does not close the file because of the on demand paging that needs pages to be loaded only when they are needed, so the file has to remain open for the entire process duration
-- as_activate invalids the whole TLB because a new process is starting
-- loadelf, the segment is not loaded when the load elf is called but only the as for that segment is set up (as_define_region, as_prepare_load and as_complete_load)
-- as_define_region ( not called for the stack ) calls seg_define that fill the ps ( prog_segment ) struct with all the needed fields
-- as_prepare_load calls seg_prepare that create the page table related to that file segment 
-- as_complete_load not used
-- returns the entrypoint that will be used to start the process
-
-
-### Flow of page loading from TLB fault
-- TLB miss
-- vm_fault in suchvm.c
-    - get_as
-    - find segment of that as
-    - try to get the physical address to the current fault virtual address
-    - alloc one page in coremap and save it into the pagetable (if it has already a correspondance in the coremap only write that correspondance in the page table)
-        - alloc_upage
-        - seg_add_pt_entry or in case of swap seg_swap_in
-    - load page from file
-        - seg_load_page
-    - tlb writing
-        - in case tlb is full, is applied roud_robin for replacin
-
-***
-
-> NEW VERSION
-
 The part analized and modified are the ones regarding `runprogram`,`loadelf` and the TLB invalidation process in the context swith. The latter is performed in `as_destroy`
 
 ### runprogram
@@ -90,18 +38,15 @@ In `runprogram` the program file is opened using `vfs_open`, and then a new addr
 The `load_elf` function was used to load the entire file in the memory, but following the policy of the on demand paging there is no need to do that. Our solution does not use the function `load_segment` in the loadelf.c file to load the segments in memory but simply reads the executable header and define the regions of the address space using `as_define_region` and prepare it through `as_prepare_load`. The function returns the entrypoint that will be used to start the process.
 
 ### Flow of page loading from TLB fault
-- TLB miss
-- vm_fault in suchvm.c
-    - get_as
-    - find segment of that as
-    - try to get the physical address to the current fault virtual address
-    - alloc one page in coremap and save it into the pagetable (if it has already a correspondance in the coremap only write that correspondance in the page table)
-        - alloc_upage
-        - seg_add_pt_entry or in case of swap seg_swap_in
-    - load page from file
-        - seg_load_page
-    - tlb writing
-        - in case tlb is full, is applied roud_robin for replacin
+When there is a TLB miss, this event is managed by `vm_fault` ( in suchvm.c). In `vm_fault` each time a new corrspondance virtual to physcal address is saved in the TLB using a round robin algorithm for the victim selection.
+During the whole process if a new page has to be saved in memory, the event is managed by the coremap using `alloc_upage` function. 
+
+In the `vm_fault` function the flow is the following :
+- The current address space structure is retrieved and then the segment associated to the fault address ( `proc_getas` , `as_find_segment`)
+- There is the attempt to get physical address of the current fault address ( `seg_get_paddr`):
+    - If there is no correspondance, a new page is loaded from the file and allocated in memory (`seg_load_page`)
+    - If that page has been swapped out previously,there is the swap in from the swap file and the page is allocated in the main memory ( `seg_swap_in`)
+- At this point if there was not an entry in the page table, a new one is created ( `seg_add_pt_entry`)
 
 
 # Implementation
@@ -571,8 +516,32 @@ kernel tests da mettere ? :
 - km1
 - km2
 
+Below is report a table with the statistics for each test
 
+||TLB Faults|TLB Faults with Free|TLB Faults with Replace|TLB Invalidations|TLB Reloads|Page Faults (zero filled)|Page Faults (disk)|ELF File Read|Swapfile Read|Swapfile Writes|
+|  :-:  | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+|ctest  |     |     |     |     |     |     |     |     |     |     |
+|huge   |     |     |     |     |     |     |     |     |     |     |
+|matmult|     |     |     |     |     |     |     |     |     |     |
+|tictac |     |     |     |     |     |     |     |     |     |     |
+|sort   |     |     |     |     |     |     |     |     |     |     |
+|palin  |     |     |     |     |     |     |     |     |     |     |
+|faulter|     |     |     |     |     |     |     |     |     |     |
+|zero   |     |     |     |     |     |     |     |     |     |     |
+|testmod|     |     |     |     |     |     |     |     |     |     |
+
+
+# Workload division
+In this project there is an high level of coupling among all components and so there was the need to work together most of the time in a sort of "pair programming style". This project was carried out mostly in a remote using the visual studio LiveShare feature wich allow us to write on a single file simultaneously . Only some part of work was divided among the component but after each implementation there was a session to update the state of the development. 
+
+Before each feature implementation there was a mind-storming session in wich we analyzed the possible solution to the problems.
+
+For the debug phase, each time a problem arised there were first a stiatic analysis on the code to try to understand errors and the a dynamic analysis of the code using the degugger (the GUI version of GDB).
+
+The code has been shared using a gitHub repository.
+
+# Conclusions
+Working on this project provided allowed us to understand more in deep the topic explained during the lessons. Thanks to the theoretical and practical issues arised during the work, we improved our problem solving capability and to organize to job in the best way possible to minimize the probability of errors.  
 
 # Improvements
-Non è stato implementato la capacità multi-processor.
-Opzionale
+A possible improvement for our project colud be the multi-processor capability for the on demanding page
