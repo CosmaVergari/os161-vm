@@ -214,7 +214,6 @@ This is the class where most of the pieces come together, it contains:
 Let's start with point (1). There are 2 functions that are involved: `vm_bootstrap()` and `vm_shutdown()`.
 
 TODO: TLB replacement test
-TODO: Add in shutdown the deallocation of coremap
 
 `vm_bootstrap()` is the VM bootstrap function and it contains the necessary initialization to make the VM work. This consists in the initialization of the [`coremap` class](#coremap), of the [`swap` class](#swapfile), of the [`vmstats` class](#statistics) used for statistics and of the [TLB replacement algorithm](#tlb-replacement-algorithm). This function is called by `boot()` in _kern/main/main.c_, that contains the initialization sequence of the kernel.
 
@@ -511,11 +510,11 @@ There are some other functions needed to manage the page table structure: `pt_co
 In order to compute the stats on page faults and the swap we created an array of counters, `stats_counts[]`, and we assigned a name to each index:
 
 ```C
-#define VMSTAT_TLB_FAULT              0
-#define VMSTAT_TLB_FAULT_FREE         1
-#define VMSTAT_TLB_FAULT_REPLACE      2
-#define VMSTAT_TLB_INVALIDATE         3
-#define VMSTAT_TLB_RELOAD             4
+#define VMSTAT_TLB_FAULT              0     // Total TLB fault
+#define VMSTAT_TLB_FAULT_FREE         1     // Faults whithout replacement in the TLB
+#define VMSTAT_TLB_FAULT_REPLACE      2     // Faults whithout replacement in the TLB
+#define VMSTAT_TLB_INVALIDATE         3     // Number of TLB invalidation
+#define VMSTAT_TLB_RELOAD             4     // 
 #define VMSTAT_PAGE_FAULT_ZERO        5
 #define VMSTAT_PAGE_FAULT_DISK        6
 #define VMSTAT_ELF_FILE_READ          7
