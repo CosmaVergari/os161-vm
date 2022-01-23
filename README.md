@@ -50,20 +50,22 @@ The major change to `runprogram()` has been leaving the ELF program file open du
 
 ### loadelf
 
-The `load_elf` function was previously used to load the entire file in the memory; but following the policy of the on demand paging there is no need to do that. Our solution does not use the function `load_segment` in the loadelf.c file to load the segments from disk but simply reads the executable header and defines the regions of the address space using `as_define_region` and prepares them through `as_prepare_load` (see [addrspace](#addrspace) and [segments](#segments) sections). The function returns the entrypoint that will be used to start the process.
+The `load_elf()` function was previously used to load the entire file in the memory; but following the policy of the on demand paging there is no need to do that.
+
+Our solution does not use the function `load_segment()` from `loadelf.c` file to load the segments from disk but simply reads the executable header and defines the regions of the address space using `as_define_region()` and prepares them through `as_prepare_load()` (see [addrspace](#addrspace) and [segments](#segments) sections). Everything is performed in the `load_elf()` function that returns the entrypoint that will be used to start the process.
 
 ### Flow of page loading from TLB fault
 
-the TLB miss event is managed by `vm_fault()` (defined in [suchvm.c](#suchvm)). In `vm_fault()`, each time a new virtual to physical address correspondence is saved in the TLB using a round robin algorithm to select the victim.
-During the whole process, the event of saving a new page in memory is managed by the coremap (see [coremap](#coremap) section) using `alloc_upage` function.
+The TLB miss event is managed by `vm_fault()` (defined in [suchvm.c](#suchvm)). Every time `vm_fault()` is called, a new virtual to physical address correspondence is saved in the TLB using a round robin algorithm to eventually select the victim.
+In all cases, the coremap intervenes by allocating a page for the user process via the `alloc_upage()` function (see [coremap](#coremap) section).
 
 In the `vm_fault` function the flow is the following :
 
-- The current address space structure is retrieved and then the segment associated to the fault address ( `proc_getas` , `as_find_segment`)( see [addrspace](#addrspace) section)
-- There is the attempt to get physical address of the current fault address (`seg_get_paddr` in [segments section](#segments)):
-  - If there is no correspondance, a new page is loaded from the file and allocated in memory (`seg_load_page`)
-  - If that page has been swapped out previously,there is the swap-in from the swap file and the page is allocated in the main memory (`seg_swap_in`)
-- At this point if in the page table there was not present an entry, a new one is created (`seg_add_pt_entry`)
+- The current address space structure is retrieved and then the segment associated to the fault address (see `proc_getas()` , `as_find_segment()` in [addrspace](#addrspace) section)
+- There is an attempt to get physical address of the current fault address from the page table (`seg_get_paddr()` in [segments section](#segments)):
+  - If there is no correspondance, a new page is allocated in memory and loaded from the file (`seg_load_page()`)
+  - If that page has been swapped out previously, a page is allocated in the main memory and then a swap-in from the swap file takes place (`seg_swap_in()`)
+- At this point if the page table didn't have the correct or any translation entry, a new one is created (`seg_add_pt_entry()`)
 
 # Implementation
 
@@ -80,7 +82,7 @@ os161 by default has a function in `ram.c` called `ram_stealmem()` that returns 
 Each entry contains the following information:
 
 ```C
-/* kern/vm/coremap.h */
+/* kern/include/coremap.h */
 
 struct coremap_entry {
     unsigned char entry_type;
@@ -93,7 +95,7 @@ struct coremap_entry {
 
 *NOTE: For more details on the data structure or the behaviour of a function or module, please refer to the source file indicated in the code blocks*
 
-`entry_type` is used to keep track of the state of the page and its possible values ( `#define constants`) are defined in coremap.h. `allocSize` instead keeps track of how many pages after the current one are allocated.
+`entry_type` is used to keep track of the state of the page and its possible values (`#define constants`) are defined in `coremap.h`. `allocSize` instead keeps track of how many pages after the current one are allocated with it.
 These 2 fields in all entries can produce a good representation of memory at a given point. And with those we can allocate memory, free it and later reuse some freed pages searched with an appropriate algorithm.
 
 These fields are enough to keep track of *kernel* memory pages, however for *user processes* memory pages we need more information. In particular we added `vaddr` and `as`. `as` is a reference to the `struct addrspace` of the *user* process that has requested this page, while `vaddr` is the virtual address of the beginning of the page.
@@ -110,29 +112,31 @@ The other fields will be discussed further in the explanation (see [swapping](#s
 There are 4 main functions inside the coremap module, that implement what we have discussed so far:
 
 - `alloc_kpages()/free_kpages()`: Respectively allocates a number of pages or frees a previously allocated range of pages in the coremap requested by the **kernel**
-- `alloc_upage()/free_upage()`: Respectively allocates **one** page or frees a previously allocated page in the coremap requested by a **user process**
+- `alloc_upage()/free_upage()`: Respectively allocates **one and only one** page or frees a previously allocated page in the coremap requested by a **user process**
 
-The reason why we only allocate 1 page for user processes is intrinsic to the idea of demand-paging, where each single page is requested one at a time from the file and only whenever needed.
+The reason why we only allocate 1 page for user processes is intrinsic to the idea of demand paging, where each single page is requested one at a time from the executable file and only whenever needed.
 
 ## segments
 
-Any user program is divided in different parts that serve different purposes at execution time. These parts are called **segments** and in the case of os161 they are usually the following:
+Any user program is divided in different parts that serve different purposes at execution time. These parts are called **segments** and in the case of os161 they are the following:
 
 - **code** segment
 - **data** segment
 - **stack** segment
 
-The code segment contains the actual machine code that will be executed by the processor when the process starts executing. Inside this segment there is a so called **entrypoint** that is the *first* instruction of the program. This segment must be **readonly** and we will see how to enforce this later on ( [suchvm](#suchvm)).
+The code segment contains the actual machine code that will be executed by the processor when the process starts executing. Inside this segment there is a so called **entrypoint** that is the *first* instruction of the program. This segment must be **readonly** and we will see how to enforce this later on ([suchvm](#suchvm)).
 
 The data segment contains the data that is used by the program during its execution. For example the memory space allocated to variables is part of this segment. This segment must be **read-write** to allow variables to be read and written back.
 
 The stack segment is an empty memory space that is used by the process to perform several operations: allocate frames for a function call, variables space, and so on. This segment is empty at process creation time and it is used by the process during its execution.
 
-The code and data segment properties declarations are in the executable ELF file headers, also their initial content is in the ELF file and for this reason they must be loaded from disk at some point in the process execution. The stack segment properties are decided by the kernel implementation instead, and its initial content is all zeroes.
+The code and data segment properties declarations are in the *executable ELF file headers*, also their initial content is in the ELF file and for this reason they must be loaded from disk at some point in the process execution. The stack segment properties are decided by the kernel implementation instead, and its initial content is all zeroes.
 
 In order to describe a segment we created a specific data structure called `prog_segment`, which is reported below:
 
 ```C
+/* kern/include/segments.h */
+
 struct prog_segment
 {
     char permissions;
@@ -165,31 +169,33 @@ In the case of code and data segments, after an access to a page that is not res
 
 ### The seg_load_page() function
 
-The `seg_load_page()` is one of the most important functions in the whole memory management system, and here is how it works. It receives as parameters the virtual address that has caused the page fault `vaddr`, and the starting physical address of the memory frame that has already been allocated to accomodated the page. There are 3 main cases for a page loading:
+The `seg_load_page()` is one of the most important functions in the whole memory management system, and here is how it works. It receives as parameters the virtual address that has caused the page fault `vaddr`, and the starting physical address of the memory frame that has already been allocated to accomodate the page. There are 3 main cases for a page loading:
 
 - The page to be loaded is the first of the `n_pages`
 - The page to be loaded is the last of the `n_pages`
 - The page to be loaded is in the middle of the virtual address range *(0 < page_index < n_pages-1)*
 
 These cases can be distinguished by checking where `vaddr` falls in the segment declared virtual address range. Depending on the case, the kernel makes a calculation on the 3 parameters required for the following *read* operation that are:
+
 - the destination physical address adjusted for internal offset
 - the offset in file to read at 
--  the length of the data to read from file
+- the length of the data to read from file
 
-To have a more detailed explanation on how these parameters are calculated, have a look at the implementation of the function in the `segments.c` file.
+To have a more detailed explanation on how these parameters are calculated, have a look at the implementation of the function in the `kern/vm/segments.c` file.
 
-At this point, the frame is completely zeroed, and the `VOP_READ` operation is triggered, effectively loading from disk to memory.
+At this point, the frame is completely zeroed, and the `VOP_READ()` operation is triggered, effectively loading from disk to memory.
 
 ### Remaining functions
 
-The remaining functions declared in the segments.c file deal with the management of the `pagetable` struct (see [pagetable](#page-table)), adding and getting entries from it, but also there are some functions dedicated to the support of the *swapping* operations (more details in the [swapping](#swapfile) section)
-
+The remaining functions declared in the `segments.c` file deal with the management of the `pagetable` struct (see [pagetable](#page-table)), adding and getting entries from it, but also there are some functions dedicated to the support of the *swapping* operations (more details in the [swapping](#swapfile) section)
 
 ## addrspace
 
-The address space of a program can be represented as a collection of segments, in particular in os161 they are usually three: the *code segment*, the *data segment* and the *stack segment*. So we decided to use the address space structure as a contanier for the three segments structure, as shown below.
+The address space of a program can be represented as a collection of segments, in particular in os161 they are three: the *code segment*, the *data segment* and the *stack segment*. So we decided to use the address space structure as a contanier for the three segments structure, as shown below.
 
 ```C
+/* kern/include/addrspace.h */
+
 struct addrspace {
     struct prog_segment *seg1;          /* code segment */
     struct prog_segment *seg2;          /* data segment */
@@ -197,31 +203,33 @@ struct addrspace {
 };
 ```
 
-In order to manage the address space we created functions: to create (`as_create`) and allocate the structure, to copy ( `as_copy`) and destroy (`as_destroy`) the address space. In particular is worth mentioning the `as_destroy` function because the data structure is destroyed only when the program has terminated, and so, since we are working in the on-demand paging setup, there is the need to close the program file with `vfs_close`, that we remind it was left open to load pages from it whenever needed.
+In order to manage the address space we created functions to create (`as_create()`) and allocate the structure, to copy (`as_copy()`) and destroy (`as_destroy()`) the address space. In particular it is worth to mention the `as_destroy()` function because the data structure is destroyed only when the program has terminated, and so there is the need to close the program file with `vfs_close()` (that we remind it was left open to load pages  whenever needed).
 
-Strictly correlated are: the function `as_prepare_load` that prepares the declared segments to the load (calls `seg_prepare`) and the function `as_define_region` since there are involved in the segment initialization and set up. In particular the latter computes the number of pages needed for the region and calls `seg_create` and `seg_define` for each segment. There is also the implementation of `as_define_stack`, that is used for the stack region in an equivalent manner as for the others two regions.
-
-Since the stack in os161 grows downwards from 0x80000000 (`USERSTACK` constant) and the base address (the lowest address of stack segment) is needed, it is computed in this way :
+Strictly correlated are: the function `as_prepare_load()` that prepares the declared segments to the load (calls `seg_prepare()`) and the function `as_define_region()`, since they are involved in the segment initialization and set up. In particular the latter computes the number of pages needed for the region and calls `seg_create()` and `seg_define()` for each segment. There is also the implementation of `as_define_stack()`, that is used for the stack region in an equivalent manner as for the others two regions (`seg_prepare()`,`seg_create()` and `seg_define()` in [segments](#segments)).
+``
+Since we need the the base address of the stack (the lowest address of stack segment) and the stack in os161 grows downwards from `0x80000000` (`USERSTACK` constant) the following computation is performed :
 
 ```C
-USERSTACK - (SUCHVM_STACKPAGES * PAGE_SIZE)
+    BASE_ADDRESS = USERSTACK - (SUCHVM_STACKPAGES * PAGE_SIZE)
 ```
 
-Then the stack pointer is assigned the value `USERSTACK`.
+Then the stack pointer is assigned the constant `USERSTACK`.
 
-Concerning the operational phases, the most important functions are the ones that **activate the address space** at each context switch and the one to **locate the proper segments** in which the system needs to executes the operations ( such as writing or reading from the page table ).
+Concerning the operational phases, the most important functions are the ones that **activate the address space** at each context switch and the one to **locate the proper segments** in which the system needs to executes the operations (such as writing or reading from the page table).
 
-The function `as_activate` is used to activate the address space, and in particular it invalidates all the tlb entries. This is necessary because the TLB is shared among processes and its entries do not contain any reference to the running process. The function checks at the beginning if the current address space is `NULL`. This means that it has been called by a kernel thread and no tlb invalidation is performed.
+The function `as_activate()` is used to activate the address space, and in particular it invalidates all the tlb entries. This is necessary since the TLB is shared among processes and its entries do not contain any reference to the running process. The function checks at the beginning if the current address space is `NULL`. This means that it has been called by a kernel thread and no tlb invalidation is performed.
 
-The function `as_find_segment` is used to retrieve the proper segment inside the current address space where the required address is located. It checks that the virtual address passed is inside the boundaries of the current adress space. There are 2 versions of this function, the first called `as_find_segment`, finds the segment by precisely checking if `vaddr` is between the start and the end address (defined as `base_vaddr + mem_size`) of one of the segments, and the second `as_find_segment_coarse` finds the segment by checking if vaddr is between the **page-aligned** virtual address start and end (defined as `base_vaddr + n_pages * PAGE_SIZE`) of one of the segments.
+The function `as_find_segment()` is used to retrieve the proper segment inside the current address space where the required address is located. It checks that the virtual address passed is inside the boundaries of the current adress space. There are 2 versions of this function, the first called `as_find_segment()`, finds the segment by precisely checking if `vaddr` is between the start and the end address (defined as `base_vaddr + mem_size`) of one of the segments. 
 
-The second one is used in the swap out operation because the requested address comes from the coremap and so it is page aligned. The problem arises because the actual boundaries of any segment may not be page aligned.
+The second one is `as_find_segment_coarse()` which finds the segment by checking if `vaddr` is between the **page-aligned**  boundaries of one of the segments (`base_vaddr` - `base_vaddr + n_pages * PAGE_SIZE`). This is used in the swap out operation because the requested address comes from the coremap and so it is page aligned. The problem arises because the actual boundaries of any segment may not be page aligned.
 
 ## Page table
 
-In order to support the paging operations a proper data structure that allows to have a correspondance between the page number and the physcial address is needed. Our choice is showed below.
+In order to support the paging operations a proper data structure that allows to have a correspondance between the virtual and the physcial addresses is needed. Our choice is showed below.
 
 ```C
+/* kern/include/pagetable.h */
+
 struct pagetable {
     unsigned long size;     /* Expressed in pages */
     vaddr_t start_vaddr;    /* Starting virtual address for the conversion*/
@@ -239,42 +247,44 @@ This is the code to get the `pages` array index from the virtual address. This v
     page_index = (vaddr - pt->start_vaddr) / PAGE_SIZE;
 ```
 
-At the table creation ( function `struct pagetable *pt_create(unsigned long size, vaddr_t start_address)` ) all the pages do not have a correspondence to a physical address, so they are assigned the constant `PT_UNPOPULATED_PAGE`. When a page is swapped out ( function `void pt_swap_out(struct pagetable *pt, off_t swapfile_offset, vaddr_t swapped_entry)`), we save in the page table the offset in the swapfile returned by the swapfile manager concatenated with the constant `PT_SWAPPED_PAGE` in this way :
+At table creation time (`pt_create()`) all the pages do not have a correspondence to a physical address, so they are assigned the constant `PT_UNPOPULATED_PAGE`. When a page is swapped out (`pt_swap_out()`), we save in the page table the offset in the swapfile returned by the swapfile manager concatenated with the constant `PT_SWAPPED_PAGE` in this way :
 
 ```C
-pt->pages[page_index] = ((paddr_t)swapfile_offset) | PT_SWAPPED_PAGE
+    pt->pages[page_index] = ((paddr_t)swapfile_offset) | PT_SWAPPED_PAGE
 ```
 
-We are sure that the constant PT_SWAPPED_PAGE does not affect normal operation because it is set in the lowest bit of the address, that can't be normally used because the CPU works on 4 bit aligned addresses.
+We are sure that the constant `PT_SWAPPED_PAGE` does not affect normal operation because it is set in the lowest bit of the address, that can't be normally used because the CPU works on 4 bit aligned addresses.
 
-Here are the 2 constants used in this context:
+Here are the two constants used in this context:
 
 ```C
-#define PT_SWAPPED_PAGE 1
-#define PT_SWAPPED_MASK 0x00000001
+    #define PT_SWAPPED_PAGE 1
+    #define PT_SWAPPED_MASK 0x00000001
 ```
 
-In doing so when the swapped page is requested back, it is possible to retrieve directly the offset of the swapfile ( function `off_t pt_get_swap_offset(struct pagetable *pt, vaddr_t vaddr)` ) and reload that page in memory. To retrieve the offset and to check if a page has been swapped out we use the mask `PT_SWAPPED_MASK` in the following way :
+In doing so when the swapped page is requested back, it is possible to retrieve directly the offset of the swapfile ( function `pt_get_swap_offset()` ) and reload that page in memory. To retrieve the offset and to check if a page has been swapped out we use the mask `PT_SWAPPED_MASK` in the following way :
 
 ```C
-    /*Page has been swapped out if the condition is true :*/
+    /*Page has been swapped out if the following condition is true :*/
     (pt -> pages[i] & PT_SWAPPED_MASK) == PT_SWAPPED_PAGE
+
     /* The offset is retrieved in the following way*/
     off_t offset = (pt->pages[page_index] & (~PT_SWAPPED_MASK));
 ```
 
-Other basic functions performed at page level by the page table are add and entry ( function `void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)`)to the table and get an entry ( `void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)`), using the trivial conversion described before. We also implemented the function `void pt_swap_in(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)` that is a wraper for the `pt_add_entry` function, when the page to be added to the page table is a swapped page.
+Other basic functions performed at page level by the page table are: adding an entry (`void pt_add_entry()`) to the table and getting one (`pt_add_entry()`), using the trivial conversion described before.
 
-There are some other functions needed to manage the page table structure: `pt_copy` to copy the entire struct, `pt_destroy` to destroy the struct and `pt_free` to free all the page saved in memory, in case there is a swapped entry, `swap_free` is called to invalidate the entry in the swapfile.
+We also implemented the function `pt_swap_in()` that is a wrapper for `pt_add_entry()`, when the page to be added to the page table is a swapped page (more details on swap in [swapfile](#swapfile)).
 
+There are some other functions needed to manage the page table structure such as : `pt_copy()` to copy the entire struct, `pt_destroy()` to destroy the struct and `pt_free()` to free all the page saved in memory. In case there is a swapped entry the function `swap_free()` is called to invalidate the entry in the swapfile.
 
 ## swapfile
 
-In order to support the swapping operation we created a management class called `swapfile.c`. This file contains most of the logic supporting the I/O from the swap file. The swapfile is located at the root of the filesystem (named SWAPFILE) and it is 9MB in space. _NOTE: These definitions are available and configurable in `swapfile.h`_. The swapfile is itself divided in pages of `PAGE_SIZE` length, just like the RAM memory. This is useful because it eases the management of the swapfile, the tracking of the offset in the swapfile, and the I/O operations.
+In order to support the swapping operation we created a management class called `swapfile.c`. This file contains most of the logic supporting the I/O from the swap file. The swapfile is located at the root of the filesystem (named SWAPFILE) and it is 9MB in space. *NOTE: These definitions are available and configurable in `swapfile.h`*. The swapfile is itself divided in pages of `PAGE_SIZE` length, just like the RAM memory. This is useful because it eases the management of the swapfile, the tracking of the offset in the swapfile, and the I/O operations.
 
-In order to manage the swapfile we used a bitmap that allows us to keep track of which swapfile _page_ is free and which is filled, so it can't be used for swapping out at a given moment. Note also that the swapfile class is agnostic of which process occupies which page of the swapfile; this information is kept in the appropriate segment, and in particular in its **pagetable** (TODO: Aggiungi link a parte di pagetable in cui si parla dello swap)
+In order to manage the swapfile we used a `bitmap` that allows us to keep track of which swapfile *page* is free and which is filled, so it can't be used for swapping out at a given moment. Note also that the swapfile class is agnostic of which process occupies which page of the swapfile; this information is kept in the appropriate segment, and in particular in its **pagetable** ([pagetable](#page-table))
 
-Whenever the virtual memory manager starts, the `swap_init()` function is called. This function prepares the swapfile class to perform the following swapping operations. Such preparation consists in opening the swapfile, saving its handle in a global variable `struct vnode *swapfile`, and creating a properly sized bitmap called `swapmap` with `SWAPFILE_SIZE/PAGE_SIZE` entries.
+Whenever the virtual memory manager starts, the `swap_init()` function is called. This function prepares the swapfile class to perform the future swapping operations. Such preparation consists in opening the swapfile, saving its handle in a global variable `struct vnode *swapfile`, and creating a properly sized bitmap called `swapmap` with `SWAPFILE_SIZE/PAGE_SIZE` entries.
 
 The bitmap and its management methods were already implemented in the system in the `struct bitmap` data type, so we decided to use this structure.
 
@@ -283,9 +293,9 @@ During a `swap_out()` operation:
 1. set the first available (zero) bit in the bitmap and retrieve its index
 2. initialize the data structures required by a disk write operation (physical address to read from, length to write, offset in the file)
 3. perform the disk write operation
-4. return the offset in the swapfile where the page has been swapped out (equal to _bitmap_free_index \* PAGE_SIZE_)
+4. return the offset in the swapfile where the page has been swapped out (equal to *bitmap_free_index \* PAGE_SIZE*)
 
-Step (4) will be useful for the tracking of the swapped pages inside for a specific process. If operation (1) fails, so when it returns a non-zero value, then it means that there is not enough free space in RAM and in swapfile. At this point the kernel does not have any other way to save the page, so it panics.
+Step *(4)* will be useful for the tracking of the swapped pages inside for a specific process. If operation *(1)* fails, that is when it returns a non-zero value, then it means that there is *not enough free space* in RAM and in swapfile. At this point the kernel does not have any other way to save the page, so it panics.
 
 The `swap_in()` operation is the symmetrical of the `swap_out()`: given an offset in the swapfile, it reads from the swapfile and resets the bit in the `swapmap`.
 
@@ -293,8 +303,7 @@ Another available operation is the `swap_free()`. This function is used when a p
 
 Every operation on the `swapmap` is performed under the ownership of a lock (`struct spinlock swaplock`) to prevent race condition between processors. This is redundant since for now we are in a single-processor architecture.
 
-Finally, the `swap_shutdown()` is invoked at memory management shutdown and it frees the used resources: close the swapfile handle and free the space used by the `swapmap`.
-
+Finally, the `swap_shutdown()` is invoked at memory manager shutdown (`vm_shutdown()`) and it frees the used resources: close the swapfile handle and free the space used by the `swapmap`.
 
 # suchvm
 
@@ -306,25 +315,27 @@ This is the class where most of the pieces come together, it contains:
 
 ## VM initialization
 
-Let's start with point (1). There are 2 functions that are involved: `vm_bootstrap()` and `vm_shutdown()`.
+Let's start with point *(1)*. There are 2 functions that are involved: `vm_bootstrap()` and `vm_shutdown()`.
 
-`vm_bootstrap()` is the VM bootstrap function and it contains the necessary initialization to make the VM work. This consists in the initialization of the [`coremap` class](#coremap), of the [`swap` class](#swapfile), of the [`vmstats` class](#statistics) used for statistics and of the [TLB replacement algorithm](#tlb-replacement-algorithm). This function is called by `boot()` in _kern/main/main.c_, that contains the initialization sequence of the kernel.
+`vm_bootstrap()` is the VM bootstrap function and it contains the necessary initialization to make the VM work. This consists in the initialization of the [`coremap` class](#coremap), of the [`swap` class](#swapfile), of the [`vmstats` class](#statistics) used for statistics and of the [TLB replacement algorithm](#tlb-replacement-algorithm). This function is called by `boot()` in *kern/main/main.c*, that contains the initialization sequence of the kernel.
 
-On the other hand, `vm_shutdown()` is the VM shutdown function and it is the specular of the bootstrap, containing the functions deallocating the resources used by the VM. This function is called by the `shutdown()` function also defined in _kern/main/main.c_, that gets executed when the machine is powering off.
+On the other hand, `vm_shutdown()` is the VM shutdown function and it is the specular of the bootstrap, containing the functions deallocating the resources used by the VM. This function is called by the `shutdown()` function defined in *kern/main/main.c*, that gets executed when the machine is powering off.
 
 ## Management of a page fault
 
-It is implemented in the function `vm_fault()`. This function is directly called by the interrupt handler `mips_trap()` whenever the code of the interrupt assumes one of the following values (defined in _arch/mips/include/trapframe.h_):
+It is implemented in the function `vm_fault()`. This function is directly called by the interrupt handler `mips_trap()` whenever the code of the interrupt assumes one of the following values (defined in *arch/mips/include/trapframe.h*):
 
 - `EX_MOD` : attempted to write in a read-only page
 - `EX_TLBL` : TLB miss on load
 - `EX_TLBS` : TLB miss on store
 
-These values have a corresponding _#define_ constant in _vm.h_. Respectively: `VM_FAULT_READONLY`, `VM_FAULT_READ`, `VM_FAULT_WRITE` are the possible values that the first parameter of `vm_fault` (`int faulttype`) can assume. This parameter is required because it produces different behaviour in the function.
+These values have a corresponding *#define* constant in *vm.h*, respectively: `VM_FAULT_READONLY`, `VM_FAULT_READ`, `VM_FAULT_WRITE`. These are the possible values that the first parameter of `vm_fault` (`int faulttype`) can assume. This parameter is required because it produces different behaviour in the function.
 
 The `vm_fault()` function closely resembles the theoretical flow of operations that we discussed in the first section ([Flow of page loading from TLB fault](#flow-of-page-loading-from-tlb-fault)). Let's now comment the `vm_fault()` function step by step:
 
 ```C
+/* kern/vm/suchvm.c */
+
 int vm_fault(int faulttype, vaddr_t faultaddress)
 {
     unsigned int tlb_index;
@@ -351,11 +362,13 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
     }
 ```
 
-In this first section we can see the prototype of the function, that accepts the fault type and the `faultaddress` parameters. The second parameter tells which is the **virtual address** inside the currently running process that caused this specific page fault.
+In this first section we can see the prototype of the function, that accepts the fault type and the `faultaddress` parameters. The second parameter tells which is the *non-page-aligned* **virtual address** inside the currently running process that caused this specific page fault.
 
-We then declare some variables that will be used later on together with a _page-aligned_ version of the faulting virtual address. We then check if `faulttype` has some illegal value and return an error in that case. We also check if the fault happened because a write on a read-only page has been performed. If that is the case we return the `EACCES` error, that is defined in _errno.h_ as a _Permission Denied_ error.
+We then declare some variables that will be used later on together with a *page-aligned* version of the faulting virtual address. We then check if `faulttype` has some illegal value and return an error in that case. We also check if the fault happened because a write on a read-only page has been performed. If that is the case we return the `EACCES` error, that is defined in *errno.h* as a *Permission Denied* error.
 
-In this latter case we want the calling process to terminate, as required by the project text. This is already done by default when returning an error from `vm_fault()`. To confirm this we can take a look at `mips_trap()` when calls `vm_fault()` and we can see that whenever `vm_fault()` returns a non-zero value (i.e. an error), and we are coming from code running in _user mode_, then the kernel executes a `kill_curthread()` on the thread/process that raised the exception.
+In this latter case we want the calling process to terminate, as required by the project text. This is already done by default when returning an error from `vm_fault()`. To confirm this we can take a look at `mips_trap()` when calls `vm_fault()` and we can see that whenever `vm_fault()` returns a non-zero value (i.e. an error), and we are coming from code running in *user mode*, then the kernel executes a `kill_curthread()` on the thread/process that raised the exception.
+
+Let's continue with our `vm_fault()` analysis.
 
 ```C
     if (curproc == NULL)
@@ -422,7 +435,6 @@ Finally, we try to distinguish which **segment** of the running process is the s
         if (result)
             return EFAULT;
     }
-
 ```
 
 Now the VM checks if the appropriate segment contains already a logical->physical address translation for the requested logical address. This is done by looking up in the **page table** maintained by each segment. The following cases may happen:
@@ -431,18 +443,18 @@ Now the VM checks if the appropriate segment contains already a logical->physica
 2. The page has been swapped out in the past and now it is required back by the process (`pt == PT_SWAPPED_PAGE`)
 3. The page is resident in memory and the translation to the physical address has been returned from the page table.
 
-In case (1), the memory manager needs to:
+In case *(1)*, the memory manager needs to:
 
-- allocate a free physical frame to the process, this is done by the function `alloc_upage()` defined in [`coremap.c`](#coremap); its physical address is held in `paddr`
+- allocate a free physical frame to the process; this is done by the function `alloc_upage()` defined in [`coremap.c`](#coremap); its physical address is held in `paddr`
 - memorize the physical address of the allocated page in the page table of the correct segment
-- distinguish if it is a _stack_ page or a _code/data_ page. If it is in a _code/data_ segment flag it as `unpopulated` which will cause below in the code to be **loaded from file**, if it is in a _stack_ segment just fill it with zeroes.
+- distinguish if it is a *stack* page or a *code/data* page. If it is in a *code/data* segment, flag it as `unpopulated` which will cause the page to be **loaded from file** in the code below, if it is in a *stack* segment just fill it with zeroes.
 
-In case (2), the memory manager needs to:
+In case *(2)*, the memory manager needs to:
 
-- allocate a free physical frame to the process, this is done by the function `alloc_upage()` defined in [`coremap.c`](#coremap); its physical address is held in `paddr`
+- allocate a free physical frame to the process; this is done by the function `alloc_upage()` defined in [`coremap.c`](#coremap); its physical address is held in the `paddr` variable
 - perform a swap in the requesting segment. This is analyzed in the [swapping section](#swapfile)
 
-In case (3), the memory manager doesn't need to perform any other operation, the physical address is already available in the variable `paddr` returned from the page table and the physical frame is already filled with the correct data.
+In case *(3)*, the memory manager doesn't need to perform any other operation, the physical address is already available in the variable `paddr` returned from the page table and the physical frame is already filled with the correct data.
 
 ### TLB replacement algorithm
 
@@ -475,7 +487,9 @@ In case (3), the memory manager doesn't need to perform any other operation, the
 }
 ```
 
-This portion of code is dedicated to the TLB management now that the logical -> physical translation is available. First of all we get the index of the TLB entry where we should save the next entry using the `tlb_get_rr_victim()` function, that implements a Round-Robin algorithm to actually compute the index. This function looks like:
+This portion of code is dedicated to the TLB management now that the logical -> physical translation is available. First of all we get the index of the TLB entry where we should save the next entry using the `tlb_get_rr_victim()` function, that implements a Round-Robin algorithm to actually compute the index. 
+
+This function looks like:
 
 ```C
     unsigned int victim = current_victim;
@@ -487,13 +501,13 @@ Basically it retrieves the index from a global variable called `current_victim` 
 
 Even when the TLB is invalidated at some point by an `as_activate` run after a thread switch for example, the `current_victim` variable does not need to be reset, the entries will simply be saved starting from a middle point of the TLB.
 
-This function together with the rest of the TLB accesses is run after _disabling the CPU interrupts_ (`splhigh`). This is because the function accesses a global variable and to avoid race conditions on the TLB entries.
+This function together with the rest of the TLB accesses is run after *disabling the CPU interrupts* (`splhigh`). This is to protect the access to a global variable and to avoid race conditions on the TLB entries.
 
-Let's talk about how the address are saved in the TLB. Looking at the specifications of the TLB for this architecture, each entry is divided in two parts (`entry_hi` and `entry_lo`).
+Let's talk about how the address translation is saved in the TLB. Looking at the specifications of the TLB for this architecture, each entry is divided in two parts (`entry_hi` and `entry_lo`).
 
-In `entry_hi` we save the _page-aligned_ virtual address that caused the page fault. In `entry_lo` we save the _page-aligned_ physical address of the frame that has been allocated to hold the faulting page. Moreover we need to set the bit at position `TLBLO_VALID` bit to tell the TLB that the translation is valid. In the `entry_lo` part also the R/W permission on the page are specified.
+In `entry_hi` we save the *page-aligned* virtual address that caused the page fault. In `entry_lo` we save the *page-aligned* physical address of the frame that has been allocated and that now holds the faulting page. Moreover we need to set the `TLBLO_VALID` bit to tell the TLB that the translation is valid. 
 
-To be more precise, by default a page has read access, the write access is instead granted by setting the bit at position `TLBLO_DIRTY`. This is done according to what are the permissions specified in the faulting _segment_. In our case the types of segments that needed write access are a data segment tagged as `PAGE_RW` and a stack segment tagged as `PAGE_STACK`.
+In the `entry_lo` part also the R/W permission on the page are specified. To be more precise, by default a page has read access, while the write access is instead granted by setting the `TLBLO_DIRTY` bit. This is done according to what are the permissions specified in the faulting *segment*. In our case the types of segments that needed *write* access are the data segments tagged as `PAGE_RW` and the stack segments tagged as `PAGE_STACK`.
 
 We then perform a check if the victim TLB entry was valid or not to update the relative statistics. Finally we save the two entries in the TLB at the index obtained before and reenable interrupts.
 
@@ -503,6 +517,8 @@ We then perform a check if the victim TLB entry was valid or not to update the r
 In order to compute the stats on page faults and the swap we created an array of counters, `stats_counts[]`, and we assigned a name to each index:
 
 ```C
+/* kern/include/vmstats.h */
+
 #define VMSTAT_TLB_FAULT              0     // Total TLB fault
 #define VMSTAT_TLB_FAULT_FREE         1     // Faults whithout replacement in the TLB
 #define VMSTAT_TLB_FAULT_REPLACE      2     // Faults whithout replacement in the TLB
@@ -521,7 +537,7 @@ In order to compute the stats on page faults and the swap we created an array of
                                             // to the swap file
 ```
 
-To access to the stats and modify the array you need a spinlock (`stats_lock`) that ensures the atomicity of the operation, except for the time when the stats are showed by `vmstats_print` at the shutdown when the atomicity is ensured by the fact that no other process is running. In this function, also the following checks are fulfilled :
+To access the stats and modify the array we put a spinlock (`stats_lock`) to ensure the atomicity of the operation. When the stats are showed by `vmstats_print` during the `shutdown()` procedure, the atomicity is guaranteed by the fact that no other process is running. In this function, also the following checks are fulfilled:
 
 ```C
 TLB Faults == TLB Faults with Free + TLB Faults with Replace
@@ -529,18 +545,18 @@ TLB Faults == TLB Reloads + Page Faults (Zeroed) + Page Faults (Disk)
 ELF File reads + Swapfile reads == Page Faults (Disk)
 ```
 
-The function `vmstats_init` is used to initialize the array of counters acquiring the lock and to activate the stats setting `stats_active = 1`. The spinlock `stats_lock`is initialized statically.
+The function `vmstats_init()` is used to initialize the array of counters and to activate the stats tracking `stats_active = 1`. The spinlock `stats_lock`is initialized statically.
 
-The specified counter is incremented via the function `vmstats_inc` to which the proper array index is passed as parameter.
+The specified counter is incremented via the function `vmstats_inc()` to which the proper array index is passed as parameter.
 
 # Addressed problems
 TODO: Qua descriviamo i problemi che abbiamo risolto
 
 # Tests
 
-We ran different tests in order to check the correctness of the virtual memory manager, both in basic and stress cases. We also tried to isolate the components of the manager that we were testing such as faulting and swapping.
+We ran different tests in order to check the correctness of the virtual memory manager, both in basic and stress cases. We also tried to isolate the components of the manager that we were testing such as faulting, swapping and TLB replacement.
 
-These are the tests in testbin that we ran :
+These are the tests in `root/testbin` that we ran :
 
 - palin
 - sort
@@ -552,9 +568,9 @@ These are the tests in testbin that we ran :
 - faulter modified (faulterro)
 - tlbreplace (created)
 
-We added the `tlbreplace` test that tries to cause a TLB replace, knowing the overall architecture.
+We added the `tlbreplace` test that tries to cause a TLB replace, knowing the system architecture.
 
-We also modified the size of the swap file and ran `matmult` to check if a _kernel panic_ is raised because the size of the logical address space is greater than the sum of the physical memory and swap file sizes.
+We also modified the size of the swap file and ran `matmult` to check if a *kernel panic* is raised when the size of the used logical address space is greater than the sum of the physical memory and swap file sizes.
 
 To further test our tracking of the physical memory we ran the following kernel tests:
 
@@ -564,37 +580,40 @@ To further test our tracking of the physical memory we ran the following kernel 
 - km1
 - km2
 
-Below is report a table with the statistics for each test
+Below is reported a table with the statistics for each test:
 
 | Test name | TLB Faults | TLB Faults with Free | TLB Faults with Replace | TLB Invalidations | TLB Reloads | Page Faults (zero filled) | Page Faults (disk) | ELF File Read | Swapfile Read | Swapfile Writes |
-|  :---:  | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-|  palin  |14008  |14008  |0      |7809   |14003  |1      |4      |4      |0      |0      |
-|  sort   |7052   |7014   |38     |3144   |5316   |289    |1447   |4      |1443   |1661   |
-|  huge   |7459   |7441   |18     |6752   |3880   |512    |3067   |3      |3064   |3506   |
-| matmult |4355   |4336   |19     |1230   |3547   |380    |428    |3      |425    |733    |
-|  ctest  |248591 |248579 |12     |249633 |123627 |257    |124707 |3      |124704 |124889 |
-|  zero   |130    |130    |0      |128    |124    |3      |3      |3      |0      |0      |
+|    :---:   | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+|    palin   |14008  |14008  |0      |7809   |14003  |1      |4      |4      |0      |0      |
+|    sort    |7052   |7014   |38     |3144   |5316   |289    |1447   |4      |1443   |1661   |
+|    huge    |7459   |7441   |18     |6752   |3880   |512    |3067   |3      |3064   |3506   |
+|   matmult  |4355   |4336   |19     |1230   |3547   |380    |428    |3      |425    |733    |
+|    ctest   |248591 |248579 |12     |249633 |123627 |257    |124707 |3      |124704 |124889 |
+|    zero    |130    |130    |0      |128    |124    |3      |3      |3      |0      |0      |
+| tlbreplace |66     |64     |2      |6      |1      |64     |1      |1      |0      |0      |
 
-The _faulter_ test tries to access an address that may be outside of the process address space boundaries. The _faulterro_ test attempts to write to a _read-only_ memory region within its boundaries. Both return segmentation fault and the process is killed, however the kernel does not panic.
+The *faulter* test tries to access an address that may be outside of the process address space boundaries. The *faulterro* test attempts to write to a *read-only* memory region within its boundaries. Both return segmentation fault and the process is killed, however the kernel does not panic.
 
-In the _swapfile kernel panic_ test the kernel panic is succesfully raised.
+In the *swapfile kernel panic* test the kernel panic is succesfully raised.
 
 The `tlbreplace` test returns a TLB replace stat of *2*. This *2* is because after the TLB is filled, the first entry (code page) is overwritten (+1). Since the code is then needed, another page fault is issued and another entry is replaced (+1). 
 
 # Workload division
 
-In this project there is an high level of coupling among all components and so there was the need to work together most of the time in a sort of "pair programming style". This project was carried out mostly remotely using the visual studio LiveShare feature wich allow us to write on a single file simultaneously. Only some part of work was divided among the component but after each implementation there was a session to update the state of the development.
+In this project there is an high level of coupling among all components and so there was the need to work together most of the time in a sort of "pair programming style". This project was carried out mostly remotely using the visual studio LiveShare feature wich allow us to write on a single file simultaneously. Only some part of work was divided among the components but after each small implementation cycle there was a session to update the state of the development.
 
 Before each feature implementation there was a brain-storming session in wich we analyzed the possible solution to the problems.
 
-For the debug phase, each time a problem arose there were first a static analysis on the code to try to understand errors and then a dynamic analysis of the code using the degugger (the GUI version of GDB).
+We also adopted a unified `Makefile` to ensure that the compiling and debugging configurations matched. The makefile is available in the root of the repository.
+
+For the debug phase, each time a problem arose there were first a static analysis on the code to try to understand errors and then a dynamic analysis of the code using the degugger (the GUI version of GDB -> DDD).
 
 The code has been shared using a GitHub repository.
 
 # Conclusions
 
-Working on this project allowed us to understand more thoroughly the topic explained during the lessons. Thanks to the theoretical and practical issues arisen during the work, we improved our problem solving capabilities and to organize to job in the best way possible to minimize the probability of errors.
+Working on this project allowed us to understand more thoroughly the topics explained during the lessons. Thanks to the theoretical and practical issues arisen during the work, we improved our problem solving capabilities and we were able to organize the job in the best way possible to minimize the probability of errors.
 
 # Improvements
 
-A possible improvement for our project colud be the multi-processor capability for the on demanding page.
+A possible improvement for our project could be adding multi-processor support for the virtual memory manager, even though some parts are already thread-safe.
