@@ -6,7 +6,7 @@ date: Ciccio
 
 # Theorical introduction
 
-This is an implementation of the project 1 by G. Cabodi. It implements _demand paging, swapping_ and provides _statistics_ on the performance of the virtual memory manager. It completely replaces DUMBVM.
+This is an implementation of the project 1 by G. Cabodi. It implements _demand paging_, _swapping_ and provides _statistics_ on the performance of the virtual memory manager. It completely replaces DUMBVM.
 
 ## On-demand paging
 
@@ -42,7 +42,7 @@ The parts analized and modified are the ones regarding `runprogram`,`loadelf` an
 
 ### runprogram
 
-In `runprogram` the program file is opened using `vfs_open`, and then a new address space is created and activated ( using `as_create` and `as_activate`). The process segments are defined by the `load_elf` function and the user stack is defined through `as_define_stack`, then the new process is started ( `enter_new_process` ). The major change to this function has been leaving the ELF program file open during the whole execution of the program. So there is no call to `vfs_close`, which instead will be executed only when the program terminates its execution (in `as_destroy`).
+In the `runprogram` function, the program file is opened using `vfs_open`, and then a new address space is created and activated ( using `as_create` and `as_activate`) (see [addrspace](#addrspace) section). The process segments are defined by the `load_elf` function and the user stack is defined through `as_define_stack`, then the new process is started ( `enter_new_process` ). The major change to this function has been leaving the ELF program file open during the whole execution of the program. So there is no call to `vfs_close`, which instead will be executed only when the program terminates its execution (in `as_destroy`).
 
 ### loadelf
 
@@ -50,16 +50,16 @@ The `load_elf` function was previously used to load the entire file in the memor
 
 ### Flow of page loading from TLB fault
 
-When there is a TLB miss, this event is managed by `vm_fault` ( in suchvm.c). In `vm_fault` each time a new corrspondance virtual to physcal address is saved in the TLB using a round robin algorithm for the victim selection.
+When there is a TLB miss, this event is managed by `vm_fault` ( in [suchvm.c](#suchvm)). In `vm_fault` each time a new corrspondance virtual to physcal address is saved in the TLB using a round robin algorithm for the victim selection.
 During the whole process if a new page has to be saved in memory, the event is managed by the coremap using `alloc_upage` function.
 
 In the `vm_fault` function the flow is the following :
 
 - The current address space structure is retrieved and then the segment associated to the fault address ( `proc_getas` , `as_find_segment`)
-- There is the attempt to get physical address of the current fault address ( `seg_get_paddr`):
+- There is the attempt to get physical address of the current fault address ( `seg_get_paddr`)(see [segments](#segments) section)):
   - If there is no correspondance, a new page is loaded from the file and allocated in memory (`seg_load_page`)
-  - If that page has been swapped out previously,there is the swap in from the swap file and the page is allocated in the main memory ( `seg_swap_in`)
-- At this point if there was not an entry in the page table, a new one is created ( `seg_add_pt_entry`)
+  - If that page has been swapped out previously,there is the swap in from the swap file and the page is allocated in the main memory (`seg_swap_in`)
+- At this point if there was not an entry in the page table, a new one is created (`seg_add_pt_entry`)
 
 # Implementation
 
@@ -513,13 +513,13 @@ In order to compute the stats on page faults and the swap we created an array of
 #define VMSTAT_TLB_FAULT              0     // Total TLB fault
 #define VMSTAT_TLB_FAULT_FREE         1     // Faults whithout replacement in the TLB
 #define VMSTAT_TLB_FAULT_REPLACE      2     // Faults whithout replacement in the TLB
-#define VMSTAT_TLB_INVALIDATE         3     // Number of TLB invalidation
-#define VMSTAT_TLB_RELOAD             4     // 
-#define VMSTAT_PAGE_FAULT_ZERO        5
-#define VMSTAT_PAGE_FAULT_DISK        6
-#define VMSTAT_ELF_FILE_READ          7
-#define VMSTAT_SWAP_FILE_READ         8
-#define VMSTAT_SWAP_FILE_WRITE        9
+#define VMSTAT_TLB_INVALIDATE         3     // TLB invalidations
+#define VMSTAT_TLB_RELOAD             4     // TLB misses for pages that were already in memory
+#define VMSTAT_PAGE_FAULT_ZERO        5     // TLB misses that required a new page to be zero-filled
+#define VMSTAT_PAGE_FAULT_DISK        6     // TLB misses that required a page to be loaded from disk
+#define VMSTAT_ELF_FILE_READ          7     // Page faults that require getting a page from the ELF file
+#define VMSTAT_SWAP_FILE_READ         8     // Page faults that require getting a page from the swap file
+#define VMSTAT_SWAP_FILE_WRITE        9     // Page faults that require writing a page to the swap file
 ```
 
 To access to the stats and modify the array you need a spinlock (`stats_lock`) that ensures the atomicity of the operation, except for the time when the stats are showed by `vmstats_print` at the shutdown when the atomicity is ensured by the fact that no other process is running. In this function, also the following checks are fulfilled :
@@ -568,14 +568,14 @@ To further test our tracking of the physical memory we ran the following kernel 
 
 Below is report a table with the statistics for each test
 
-|         | TLB Faults | TLB Faults with Free | TLB Faults with Replace | TLB Invalidations | TLB Reloads | Page Faults (zero filled) | Page Faults (disk) | ELF File Read | Swapfile Read | Swapfile Writes |
-| :-----: | :--------: | :------------------: | :---------------------: | :---------------: | :---------: | :-----------------------: | :----------------: | :-----------: | :-----------: | :-------------: |
-|  palin  |   13963    |        13963         |            0            |       7824        |    13958    |             1             |         4          |       4       |       0       |        0        |
-|  sort   |    7052    |         7052         |            0            |       3144        |    5316     |            289            |        1447        |       4       |     1443      |      1661       |
-|  huge   |    7459    |         7459         |            0            |       6752        |    3880     |            512            |        3067        |       3       |     3064      |      3506       |
-| matmult |    4300    |         4300         |            0            |       1204        |    3492     |            380            |        428         |       3       |      425      |       733       |
-|  ctest  |   248591   |        248591        |            0            |      249633       |   123627    |            257            |       124707       |       3       |    124704     |     124889      |
-|  zero   |    143     |         143          |            0            |        139        |     137     |             3             |         3          |       3       |       0       |        0        |
+| Test name | TLB Faults | TLB Faults with Free | TLB Faults with Replace | TLB Invalidations | TLB Reloads | Page Faults (zero filled) | Page Faults (disk) | ELF File Read | Swapfile Read | Swapfile Writes |
+|  :---:  | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+|  palin  |14008  |14008  |0      |7809   |14003  |1      |4      |4      |0      |0      |
+|  sort   |7052   |7014   |38     |3144   |5316   |289    |1447   |4      |1443   |1661   |
+|  huge   |7459   |7441   |18     |6752   |3880   |512    |3067   |3      |3064   |3506   |
+| matmult |4355   |4336   |19     |1230   |3547   |380    |428    |3      |425    |733    |
+|  ctest  |248591 |248579 |12     |249633 |123627 |257    |124707 |3      |124704 |124889 |
+|  zero   |130    |130    |0      |128    |124    |3      |3      |3      |0      |0      |
 
 The _faulter_ test tries to access an address that may be outside of the process address space boundaries. The _faulterro_ test attempts to write to a _read-only_ memory region within its boundaries. Both return segmentation fault and the process is killed, however the kernel does not panic.
 
