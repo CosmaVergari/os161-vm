@@ -214,7 +214,6 @@ This is the class where most of the pieces come together, it contains:
 Let's start with point (1). There are 2 functions that are involved: `vm_bootstrap()` and `vm_shutdown()`.
 
 TODO: TLB replacement test
-TODO: Add in shutdown the deallocation of coremap
 
 `vm_bootstrap()` is the VM bootstrap function and it contains the necessary initialization to make the VM work. This consists in the initialization of the [`coremap` class](#coremap), of the [`swap` class](#swapfile), of the [`vmstats` class](#statistics) used for statistics and of the [TLB replacement algorithm](#tlb-replacement-algorithm). This function is called by `boot()` in _kern/main/main.c_, that contains the initialization sequence of the kernel.
 
@@ -366,12 +365,14 @@ In case (1), the memory manager needs to:
 In case (2), the memory manager needs to:
 
 - allocate a free physical frame to the process, this is done by the function `alloc_upage()` defined in [`coremap.c`](#coremap); its physical address is held in `paddr`
-- perform a swap in the requesting segment. This is analyzed in the [swapping section](#swapping)
-<!-- TODO: Check link -->
+- perform a swap in the requesting segment. This is analyzed in the [swapping section](#swapfile)
 
 In case (3), the memory manager doesn't need to perform any other operation, the physical address is already available in the variable `paddr` returned from the page table and the physical frame is already filled with the correct data.
 
+### TLB replacement algorithm
+
 ```C
+/* Ending part of vm_fault */
     vmstats_inc(VMSTAT_TLB_FAULT);
     /* Disable interrupts on this CPU while frobbing the TLB. */
     spl = splhigh();
@@ -387,10 +388,11 @@ In case (3), the memory manager doesn't need to perform any other operation, the
     }
     DEBUG(DB_VM, "suchvm: 0x%x -> 0x%x\n", page_aligned_faultaddress, paddr);
 
-    if ( tlb_probe(entry_hi, 0) < 0){
-        vmstats_inc(VMSTAT_TLB_FAULT_FREE);
-    }else{
+    tlb_read(&old_hi, &old_lo, tlb_index);
+    if (old_lo & TLBLO_VALID){
         vmstats_inc(VMSTAT_TLB_FAULT_REPLACE);
+    } else {
+        vmstats_inc(VMSTAT_TLB_FAULT_FREE);
     }
 
     tlb_write(entry_hi, entry_lo, tlb_index);
@@ -399,9 +401,6 @@ In case (3), the memory manager doesn't need to perform any other operation, the
     return 0;
 }
 ```
-
-### TLB replacement algorithm
-
 This portion of code is dedicated to the TLB management now that the logical -> physical translation is available. First of all we get the index of the TLB entry where we should save the next entry using the `tlb_get_rr_victim()` function, that implements a Round-Robin algorithm to actually compute the index. This function looks like:
 
 ```C

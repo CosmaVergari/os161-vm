@@ -70,7 +70,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
     int spl, result;
     char unpopulated;
     paddr_t paddr;
-    uint32_t entry_hi, entry_lo;
+    uint32_t entry_hi, entry_lo, old_hi, old_lo;
     struct addrspace *as;
     struct prog_segment *ps;
     vaddr_t page_aligned_faultaddress;
@@ -192,16 +192,15 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 
     /*
      * Check added for stats purposes
-     * tlb_probe: look for an entry matching the virtual page in ENTRYHI.
-     * Returns the index, or a negative number if no matching entry
-     * was found. ENTRYLO is not actually used, but must be set; 0
-     * should be passed
-     * 
+     * Read the TLB entry that is going to be substituted with the
+     * RR algorithm. If the entry is still VALID, it means that
+     * it is a replacement
      */
-    if ( tlb_probe(entry_hi, 0) < 0){
-        vmstats_inc(VMSTAT_TLB_FAULT_FREE);
-    }else{
+    tlb_read(&old_hi, &old_lo, tlb_index);
+    if (old_lo & TLBLO_VALID){
         vmstats_inc(VMSTAT_TLB_FAULT_REPLACE);
+    }else{
+        vmstats_inc(VMSTAT_TLB_FAULT_FREE);
     }
 
     tlb_write(entry_hi, entry_lo, tlb_index);
