@@ -40,7 +40,7 @@ The normal flow of operation of os161 starting a user program begins from the me
 - `loadelf`
 - `enter_new_process`
 
-The parts analized and modified are the ones regarding `runprogram`,`loadelf` and the TLB invalidation process in the context switch. The latter is performed in `as_activate`.
+The parts analized and modified are the ones regarding `runprogram`,`loadelf` and the TLB invalidation process in the context switch. The latter is performed in `as_activate` (see [addrspace](#addrspace) section).
 
 ### runprogram
 
@@ -52,16 +52,16 @@ The `load_elf` function was previously used to load the entire file in the memor
 
 ### Flow of page loading from TLB fault
 
-When there is a TLB miss, this event is managed by `vm_fault` ( in [suchvm.c](#suchvm)). In `vm_fault` each time a new corrspondance virtual to physcal address is saved in the TLB using a round robin algorithm for the victim selection.
-During the whole process if a new page has to be saved in memory, the event is managed by the coremap using `alloc_upage` function.
+When there is a TLB miss, this event is managed by `vm_fault` ( in [suchvm.c](#suchvm)). In `vm_fault` each time a new correspondance virtual to physcal address is saved in the TLB using a round robin algorithm to select the victim.
+During the whole process, the event of saving a new page in memory is managed by the coremap (see [coremap](#coremap) section) using `alloc_upage` function.
 
 In the `vm_fault` function the flow is the following :
 
-- The current address space structure is retrieved and then the segment associated to the fault address ( `proc_getas` , `as_find_segment`)
-- There is the attempt to get physical address of the current fault address ( `seg_get_paddr`)(see [segments](#segments) section)):
+- The current address space structure is retrieved and then the segment associated to the fault address ( `proc_getas` , `as_find_segment`)( see [addrspace](#addrspace) section)
+- There is the attempt to get physical address of the current fault address (`seg_get_paddr`)(see [segments](#segments) section)):
   - If there is no correspondance, a new page is loaded from the file and allocated in memory (`seg_load_page`)
-  - If that page has been swapped out previously,there is the swap in from the swap file and the page is allocated in the main memory (`seg_swap_in`)
-- At this point if there was not an entry in the page table, a new one is created (`seg_add_pt_entry`)
+  - If that page has been swapped out previously,there is the swap-in from the swap file and the page is allocated in the main memory (`seg_swap_in`)
+- At this point if in the page table there was not present an entry, a new one is created (`seg_add_pt_entry`)
 
 # Implementation
 
@@ -72,7 +72,8 @@ The whole memory can be represented as a collection of pages that are in differe
 - _untracked_: if the memory manager has not the control over that page yet
 - _occupied_: if the memory manager is aware of the page and it has been allocated for a user or kernel process
 - _free_: if the memory manager is aware of the page but nobody is using it
-  os161 by default has a function in `ram.c` called `ram_stealmem()` that returns the physical address of a frame that has never been used before. This form of tracking is not enough for our purposes, so we created an array of structures `struct coremap_entry`, 1 entry for each existing page of memory.
+
+os161 by default has a function in `ram.c` called `ram_stealmem()` that returns the physical address of a frame that has never been used before. This form of tracking is not enough for our purposes, so we created an array of structures `struct coremap_entry`, 1 entry for each existing page of memory.
 
 Each entry contains the following information:
 
@@ -90,20 +91,21 @@ struct coremap_entry {
 
 _NOTE: For more details on the data structure or the behaviour of a function or module, please refer to the source file indicated in the code blocks_
 
-`entry_type` is used to keep track of the state of the page and its possible values (#define constants) are defined in coremap.h, `allocSize` instead keeps track of how many pages after the current one are allocated.
+`entry_type` is used to keep track of the state of the page and its possible values ( `#define constants`) are defined in coremap.h. `allocSize` instead keeps track of how many pages after the current one are allocated.
 These 2 fields in all entries can produce a good representation of memory at a given point. And with those we can allocate memory, free it and later reuse some freed pages searched with an appropriate algorithm.
 
-These fields are okay to keep track of _kernel_ memory pages, however for _user processes_ memory pages we need more information, in particular we added `vaddr` and `as`. `as` is a reference to the `struct addrspace` of the _user_ process that has requested this page, while `vaddr` is the virtual address of the beginning of the page.
+These fields are enough to keep track of _kernel_ memory pages, however for _user processes_ memory pages we need more information. In particular we added `vaddr` and `as`. `as` is a reference to the `struct addrspace` of the _user_ process that has requested this page, while `vaddr` is the virtual address of the beginning of the page.
 
-The array of `struct coremap_entry` is defined in _kern/vm/coremap.c_ as a static variable _static struct coremap_entry \*coremap_, and allocated in `coremap_init()` with a length of (number of RAM frames/page size).
+The array of `struct coremap_entry` is defined in _kern/vm/coremap.c_ as a static variable *static struct coremap_entry \*coremap*, and allocated in `coremap_init()` with a length of _(number of RAM frames/page size)_.
 
 But how do we obtain the physical address of the page? If we consider the beginning of the `coremap` array as the address `0x00000000` in memory, and that each `coremap_entry` corresponds to a page of size `PAGE_SIZE` (defined in _kern/arch/mips/include/vm.h_ as 4096 bytes), then for the i-th entry the **physical address** will be:
 
-> `paddr = i * PAGE_SIZE`
+```C
+    paddr = i * PAGE_SIZE
+```
+The other fields will be discussed further in the explanation (see [swapping](#swapfile)).
 
-The other fields will be discussed further in the explanation (see TODO: add reference to swapping).
-
-There are 4 main functions inside the coremap module, that implement what we've talked so far:
+There are 4 main functions inside the coremap module, that implement what we have discussed so far:
 
 - `alloc_kpages()/free_kpages()`: Respectively allocates a number of pages or frees a previously allocated range of pages in the coremap requested by the **kernel**
 - `alloc_upage()/free_upage()`: Respectively allocates **one** page or frees a previously allocated page in the coremap requested by a **user process**
@@ -118,7 +120,7 @@ Any user program is divided in different parts that serve different purposes at 
 - **data** segment
 - **stack** segment
 
-The code segment contains the actual machine code that will be executed by the processor when the process starts executing. Inside this segment there is a so called **entrypoint** that is the _first_ instruction of the program. This segment must be **readonly** and we will see how to enforce this later on (TODO: link).
+The code segment contains the actual machine code that will be executed by the processor when the process starts executing. Inside this segment there is a so called **entrypoint** that is the _first_ instruction of the program. This segment must be **readonly** and we will see how to enforce this later on ( [suchvm](#suchvm)).
 
 The data segment contains the data that is used by the program during its execution. For example the memory space allocated to variables is part of this segment. This segment must be **read-write** to allow variables to be read and written back.
 
@@ -147,11 +149,11 @@ Here is a brief description of each field:
 - `permissions` describes what operations can be performed on the segment (R/W/X, STACK) and can assume only one of the constant values declared in the header file, the logic should follow what has been said at the beginning of the chapter
 - `file_size` contains the information of how long the segment is in the ELF file
 - `file_offset` contains the offset inside the file where the considered segment begins at
-- `base_vaddr` is the starting virtual address of the segment, so any access of the declaring process to a virtual address within `base_vaddr` and `base_vaddr + mem_size` will be inside this segment.
+- `base_vaddr` is the starting virtual address of the segment, so any access of the declaring process to a virtual address within `base_vaddr` and `base_vaddr + mem_size` will be inside this segment
 - `n_pages` the length of the segment expressed in number of pages
 - `mem_size` the length of the segment expressed in memory words
 - `elf_vnode` a reference to the ELF file by which this segment was declared
-- `pagetable` a pointer to a struct pagetable (TODO: Aggiungi link a classe pagetable) that will be used at address translation (better explanation later on)
+- `pagetable` a pointer to a struct pagetable (see [pagetable](#page-table)) that will be used at address translation (better explanation later on)
 
 In order to manage cleanly the creation and destruction of such struct we created 3 appropriate methods called `seg_create()`, `seg_copy()`, `seg_destroy()`, whose behaviour is pretty straightforward. The actual declaration of the properties of the segment is done inside `seg_define()` and `seg_define_stack()` which are called at process creation time. The distinction between the two functions is because code and data segments are loaded from file, while the stack segment is not. The `seg_prepare()` function allocates a page table `n_pages` long to accomodate the address translation later on.
 
@@ -175,6 +177,90 @@ At this point, the frame is completely zeroed, and the `VOP_READ` operation is t
 ### Remaining functions
 
 The remaining functions declared in the segments.c file deal with the management of the `pagetable` struct, adding and getting entries from it, but also there are some functions dedicated to the support of the _swapping_ operations, but we will see them in more detail while talking about the architecture of _swapping_.
+
+
+## addrspace
+
+The address space of a program che be represented as a collection of segments, in particular in os161 they are usually three , the code segment, the data segment and the stack segment. So we decided to use the address space structure as a contanier for the three segments structure, as shown below.
+
+```C
+struct addrspace {
+    struct prog_segment *seg1;          /* code segment */
+    struct prog_segment *seg2;          /* data segment */
+    struct prog_segment *seg_stack;     /* stack segment */
+};
+```
+
+In order to manage the address space we created functions: to create (`as_create`) and allocate the structure, to copy ( `as_copy`) and destroy (`as_destroy`) the address space. In particular is worth mentioning the `as_destroy` function because the data structure is destroyed only when the program has terminated, and so, since we are working in the on-demand paging setup, there is the need to close the program file with `vfs_close`, that we remind it was left open to load pages from it whenever needed.
+
+Strictly correlated are: the function `as_prepare_load` that prepares the declared segments to the load (calls `seg_prepare`) and the function `as_define_region` since there are involved in the segment initialization and set up. In particular the latter computes the number of pages needed for the region and calls `seg_create` and `seg_define` for each segment. There is also the implementation of `as_define_stack`, that is used for the stack region in an equivalent manner as for the others two regions.
+
+Since the stack in os161 grows downwards from 0x80000000 (`USERSTACK` constant) and the base address (the lowest address of stack segment) is needed, it is computed in this way :
+
+```C
+USERSTACK - (SUCHVM_STACKPAGES * PAGE_SIZE)
+```
+
+Then the stack pointer is assigned the value `USERSTACK`.
+
+Concerning the operational phases, the most important functions are the ones that **activate the address space** at each context switch and the one to **locate the proper segments** in which the system needs to executes the operations ( such as writing or reading from the page table ).
+
+The function `as_activate` is used to activate the address space, and in particular it invalidates all the tlb entries. This is necessary because the TLB is shared among processes and its entries do not contain any reference to the running process. The function checks at the beginning if the current address space is `NULL`. This means that it has been called by a kernel thread and no tlb invalidation is performed.
+
+The function `as_find_segment` is used to retrieve the proper segment inside the current address space where the required address is located. It checks that the virtual address passed is inside the boundaries of the current adress space. There are 2 versions of this function, the first called `as_find_segment`, finds the segment by precisely checking if `vaddr` is between the start and the end address (defined as `base_vaddr + mem_size`) of one of the segments, and the second `as_find_segment_coarse` finds the segment by checking if vaddr is between the **page-aligned** virtual address start and end (defined as `base_vaddr + n_pages * PAGE_SIZE`) of one of the segments.
+
+The second one is used in the swap out operation because the requested address comes from the coremap and so it is page aligned. The problem arises because the actual boundaries of any segment may not be page aligned.
+
+## Page table
+
+In order to support the paging operations a proper data structure that allows to have a correspondance between the page number and the physcial address is needed. Our choice is showed below.
+
+```C
+struct pagetable {
+    unsigned long size;     /* Expressed in pages */
+    vaddr_t start_vaddr;    /* Starting virtual address for the conversion*/
+    paddr_t *pages;         /* Array of physical address to achieve the conversion */
+};
+```
+
+In the structure above, `start_vaddr` and `size` are the starting virtual address of the page table and the number of pages that are translated. They are used to check if a translation to be added or retrieved is inside the boundaries of the table.
+All addresses inside the page table are page aligned so that the conversion to index is trivial.
+
+This is the code to get the `pages` array index from the virtual address. This value will later be used to assign or retrieve a physical address from the table:
+
+```C
+    vaddr = vaddr & PAGE_FRAME;
+    page_index = (vaddr - pt->start_vaddr) / PAGE_SIZE;
+```
+
+At the table creation ( function `struct pagetable *pt_create(unsigned long size, vaddr_t start_address)` ) all the pages do not have a correspondence to a physical address, so they are assigned the constant `PT_UNPOPULATED_PAGE`. When a page is swapped out ( function `void pt_swap_out(struct pagetable *pt, off_t swapfile_offset, vaddr_t swapped_entry)`), we save in the page table the offset in the swapfile returned by the swapfile manager concatenated with the constant `PT_SWAPPED_PAGE` in this way :
+
+```C
+pt->pages[page_index] = ((paddr_t)swapfile_offset) | PT_SWAPPED_PAGE
+```
+
+We are sure that the constant PT_SWAPPED_PAGE does not affect normal operation because it is set in the lowest bit of the address, that can't be normally used because the CPU works on 4 bit aligned addresses.
+
+Here are the 2 constants used in this context:
+
+```C
+#define PT_SWAPPED_PAGE 1
+#define PT_SWAPPED_MASK 0x00000001
+```
+
+In doing so when the swapped page is requested back, it is possible to retrieve directly the offset of the swapfile ( function `off_t pt_get_swap_offset(struct pagetable *pt, vaddr_t vaddr)` ) and reload that page in memory. To retrieve the offset and to check if a page has been swapped out we use the mask `PT_SWAPPED_MASK` in the following way :
+
+```C
+    /*Page has been swapped out if the condition is true :*/
+    (pt -> pages[i] & PT_SWAPPED_MASK) == PT_SWAPPED_PAGE
+    /* The offset is retrieved in the following way*/
+    off_t offset = (pt->pages[page_index] & (~PT_SWAPPED_MASK));
+```
+
+Other basic functions performed at page level by the page table are add and entry ( function `void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)`)to the table and get an entry ( `void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)`), using the trivial conversion described before. We also implemented the function `void pt_swap_in(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)` that is a wraper for the `pt_add_entry` function, when the page to be added to the page table is a swapped page.
+
+There are some other functions needed to manage the page table structure: `pt_copy` to copy the entire struct, `pt_destroy` to destroy the struct and `pt_free` to free all the page saved in memory, in case there is a swapped entry, `swap_free` is called to invalidate the entry in the swapfile.
+
 
 ## swapfile
 
@@ -203,6 +289,7 @@ Every operation on the `swapmap` is performed under the ownership of a lock (`st
 
 Finally, the `swap_shutdown()` is invoked at memory management shutdown and it frees the used resources: close the swapfile handle and free the space used by the `swapmap`.
 
+
 # suchvm
 
 This is the class where most of the pieces come together, it contains:
@@ -214,8 +301,6 @@ This is the class where most of the pieces come together, it contains:
 ## VM initialization
 
 Let's start with point (1). There are 2 functions that are involved: `vm_bootstrap()` and `vm_shutdown()`.
-
-TODO: TLB replacement test
 
 `vm_bootstrap()` is the VM bootstrap function and it contains the necessary initialization to make the VM work. This consists in the initialization of the [`coremap` class](#coremap), of the [`swap` class](#swapfile), of the [`vmstats` class](#statistics) used for statistics and of the [TLB replacement algorithm](#tlb-replacement-algorithm). This function is called by `boot()` in _kern/main/main.c_, that contains the initialization sequence of the kernel.
 
@@ -406,87 +491,6 @@ To be more precise, by default a page has read access, the write access is inste
 
 We then perform a check if the victim TLB entry was valid or not to update the relative statistics. Finally we save the two entries in the TLB at the index obtained before and reenable interrupts.
 
-## addrspace
-
-The address space of a program che be represented as a collection of segments, in particular in os161 they are usually three , the code segment, the data segment and the stack segment. So we decided to use the address space structure as a contanier for the three segments structure, as shown below.
-
-```C
-struct addrspace {
-    struct prog_segment *seg1;          /* code segment */
-    struct prog_segment *seg2;          /* data segment */
-    struct prog_segment *seg_stack;     /* stack segment */
-};
-```
-
-In order to manage the address space we created functions: to create (`as_create`) and allocate the structure, to copy ( `as_copy`) and destroy (`as_destroy`) the address space. In particular is worth mentioning the `as_destroy` function because the data structure is destroyed only when the program has terminated, and so, since we are working in the on-demand paging setup, there is the need to close the program file with `vfs_close`, that we remind it was left open to load pages from it whenever needed.
-
-Strictly correlated are: the function `as_prepare_load` that prepares the declared segments to the load (calls `seg_prepare`) and the function `as_define_region` since there are involved in the segment initialization and set up. In particular the latter computes the number of pages needed for the region and calls `seg_create` and `seg_define` for each segment. There is also the implementation of `as_define_stack`, that is used for the stack region in an equivalent manner as for the others two regions.
-
-Since the stack in os161 grows downwards from 0x80000000 (`USERSTACK` constant) and the base address (the lowest address of stack segment) is needed, it is computed in this way :
-
-```C
-USERSTACK - (SUCHVM_STACKPAGES * PAGE_SIZE)
-```
-
-Then the stack pointer is assigned the value `USERSTACK`.
-
-Concerning the operational phases, the most important functions are the ones that **activate the address space** at each context switch and the one to **locate the proper segments** in which the system needs to executes the operations ( such as writing or reading from the page table ).
-
-The function `as_activate` is used to activate the address space, and in particular it invalidates all the tlb entries. This is necessary because the TLB is shared among processes and its entries do not contain any reference to the running process. The function checks at the beginning if the current address space is `NULL`. This means that it has been called by a kernel thread and no tlb invalidation is performed.
-
-The function `as_find_segment` is used to retrieve the proper segment inside the current address space where the required address is located. It checks that the virtual address passed is inside the boundaries of the current adress space. There are 2 versions of this function, the first called `as_find_segment`, finds the segment by precisely checking if `vaddr` is between the start and the end address (defined as `base_vaddr + mem_size`) of one of the segments, and the second `as_find_segment_coarse` finds the segment by checking if vaddr is between the **page-aligned** virtual address start and end (defined as `base_vaddr + n_pages * PAGE_SIZE`) of one of the segments.
-
-The second one is used in the swap out operation because the requested address comes from the coremap and so it is page aligned. The problem arises because the actual boundaries of any segment may not be page aligned.
-
-## Page table
-
-In order to support the paging operations a proper data structure that allows to have a correspondance between the page number and the physcial address is needed. Our choice is showed below.
-
-```C
-struct pagetable {
-    unsigned long size;     /* Expressed in pages */
-    vaddr_t start_vaddr;    /* Starting virtual address for the conversion*/
-    paddr_t *pages;         /* Array of physical address to achieve the conversion */
-};
-```
-
-In the structure above, `start_vaddr` and `size` are the starting virtual address of the page table and the number of pages that are translated. They are used to check if a translation to be added or retrieved is inside the boundaries of the table.
-All addresses inside the page table are page aligned so that the conversion to index is trivial.
-
-This is the code to get the `pages` array index from the virtual address. This value will later be used to assign or retrieve a physical address from the table:
-
-```C
-    vaddr = vaddr & PAGE_FRAME;
-    page_index = (vaddr - pt->start_vaddr) / PAGE_SIZE;
-```
-
-At the table creation ( function `struct pagetable *pt_create(unsigned long size, vaddr_t start_address)` ) all the pages do not have a correspondence to a physical address, so they are assigned the constant `PT_UNPOPULATED_PAGE`. When a page is swapped out ( function `void pt_swap_out(struct pagetable *pt, off_t swapfile_offset, vaddr_t swapped_entry)`), we save in the page table the offset in the swapfile returned by the swapfile manager concatenated with the constant `PT_SWAPPED_PAGE` in this way :
-
-```C
-pt->pages[page_index] = ((paddr_t)swapfile_offset) | PT_SWAPPED_PAGE
-```
-
-We are sure that the constant PT_SWAPPED_PAGE does not affect normal operation because it is set in the lowest bit of the address, that can't be normally used because the CPU works on 4 bit aligned addresses.
-
-Here are the 2 constants used in this context:
-
-```C
-#define PT_SWAPPED_PAGE 1
-#define PT_SWAPPED_MASK 0x00000001
-```
-
-In doing so when the swapped page is requested back, it is possible to retrieve directly the offset of the swapfile ( function `off_t pt_get_swap_offset(struct pagetable *pt, vaddr_t vaddr)` ) and reload that page in memory. To retrieve the offset and to check if a page has been swapped out we use the mask `PT_SWAPPED_MASK` in the following way :
-
-```C
-    /*Page has been swapped out if the condition is true :*/
-    (pt -> pages[i] & PT_SWAPPED_MASK) == PT_SWAPPED_PAGE
-    /* The offset is retrieved in the following way*/
-    off_t offset = (pt->pages[page_index] & (~PT_SWAPPED_MASK));
-```
-
-Other basic functions performed at page level by the page table are add and entry ( function `void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)`)to the table and get an entry ( `void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)`), using the trivial conversion described before. We also implemented the function `void pt_swap_in(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)` that is a wraper for the `pt_add_entry` function, when the page to be added to the page table is a swapped page.
-
-There are some other functions needed to manage the page table structure: `pt_copy` to copy the entire struct, `pt_destroy` to destroy the struct and `pt_free` to free all the page saved in memory, in case there is a swapped entry, `swap_free` is called to invalidate the entry in the swapfile.
 
 ## Statistics
 
@@ -524,8 +528,7 @@ The function `vmstats_init` is used to initialize the array of counters acquirin
 The specified counter is incremented via the function `vmstats_inc` to which the proper array index is passed as parameter.
 
 # Addressed problems
-
-Qua descriviamo i problemi che abbiamo risolto
+TODO: Qua descriviamo i problemi che abbiamo risolto
 
 # Tests
 
