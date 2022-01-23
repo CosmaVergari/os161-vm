@@ -31,5 +31,4 @@ options semfs			# Semaphores for userland
 options sfs			# Always use the file system
 #options netfs			# You might write this as a project.
 
-#options dumbvm			# TO BE REMOVED
-options suchvm          # Our VM manager
+options paging          # Our VM manager

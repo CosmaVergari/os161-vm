@@ -39,7 +39,7 @@
 #include <vm.h>
 #include <mainbus.h>
 #include <syscall.h>
-#include "opt-suchvm.h"
+#include "opt-paging.h"
 
 
 /* in exception-*.S */
@@ -90,7 +90,7 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
 	    case EX_TLBL:
 	    case EX_TLBS:
 		sig = SIGSEGV;
-#ifdef OPT_SUCHVM
+#if OPT_PAGING
 		/* 
 		 * Executed when a TLB miss on R/W or an EX_MOD (write on a 
 		 * read-only segment) exception is raised, usually as a result

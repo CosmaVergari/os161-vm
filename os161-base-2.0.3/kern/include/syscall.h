@@ -30,7 +30,7 @@
 #ifndef _SYSCALL_H_
 #define _SYSCALL_H_
 
-#include "opt-suchvm.h"
+#include "opt-paging.h"
 
 #include <cdefs.h> /* for __DEAD */
 struct trapframe; /* from <machine/trapframe.h> */
@@ -60,7 +60,7 @@ __DEAD void enter_new_process(int argc, userptr_t argv, userptr_t env,
 int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 
-#ifdef OPT_SUCHVM
+#if OPT_PAGING
 void sys__exit(int status);
 int sys_read(int fd, userptr_t buf, size_t size);
 int sys_write(int fd, userptr_t buf, size_t size);

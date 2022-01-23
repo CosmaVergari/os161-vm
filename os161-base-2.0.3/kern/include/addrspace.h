@@ -38,7 +38,7 @@
 #include <vm.h>
 #include <segments.h>
 #include "opt-dumbvm.h"
-#include "opt-suchvm.h"
+#include "opt-paging.h"
 
 struct vnode;
 
@@ -60,7 +60,7 @@ struct addrspace {
         size_t as_npages2;
         paddr_t as_stackpbase;
 #endif
-#if OPT_SUCHVM
+#if OPT_PAGING
         /* SuchVM structure */
         struct prog_segment *seg1;
         struct prog_segment *seg2; 
@@ -115,6 +115,7 @@ void              as_activate(void);
 void              as_deactivate(void);
 void              as_destroy(struct addrspace *as);
 
+#if OPT_PAGING
 int               as_define_region(struct addrspace *as,
                                    vaddr_t vaddr, size_t memsize,
                                    size_t file_size,
@@ -123,6 +124,13 @@ int               as_define_region(struct addrspace *as,
                                    int readable,
                                    int writeable,
                                    int executable);
+#else
+int               as_define_region(struct addrspace *as,
+                                   vaddr_t vaddr, size_t sz,
+                                   int readable,
+                                   int writeable,
+                                   int executable);
+#endif /* OPT_PAGING*/
 int               as_prepare_load(struct addrspace *as);
 int               as_complete_load(struct addrspace *as);
 int               as_define_stack(struct addrspace *as, vaddr_t *initstackptr);
@@ -149,9 +157,11 @@ int               as_define_stack(struct addrspace *as, vaddr_t *initstackptr);
  * sure that the next operations are aware of the real base_vaddr, or
  * they don't need to be.
  */
+
+#ifdef OPT_PAGING
 struct prog_segment* as_find_segment(struct addrspace *as, vaddr_t vaddr);
 struct prog_segment* as_find_segment_coarse(struct addrspace *as, vaddr_t vaddr);
-
+#endif
 
 /*
  * Functions in loadelf.c

@@ -49,7 +49,7 @@
 #include <addrspace.h>
 #include <vnode.h>
 
-#include "opt-suchvm.h"
+#include "opt-paging.h"
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -272,15 +272,23 @@ void proc_remthread(struct thread *t)
 	proc = t->t_proc;
 	KASSERT(proc != NULL);
 
-	//spinlock_acquire(&proc->p_lock);
+	/* Required for the exit syscall not to block */
+#if OPT_PAGING
 	spl = splhigh();
+#else
+	spinlock_acquire(&proc->p_lock);
+#endif	/* OPT_PAGING */
 	KASSERT(proc->p_numthreads > 0);
 	proc->p_numthreads--;
+#if OPT_PAGING
 	if (proc->p_numthreads == 0)
 	{
 		proc_destroy(proc);
 	}
-	//spinlock_release(&proc->p_lock);
+#else
+	spinlock_release(&proc->p_lock);
+	spl = splhigh();
+#endif	/* OPT_PAGING */
 
 	
 	t->t_proc = NULL;

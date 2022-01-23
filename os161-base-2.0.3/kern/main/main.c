@@ -50,6 +50,7 @@
 #include <test.h>
 #include <version.h>
 #include "autoconf.h"  // for pseudoconfig
+#include "opt-paging.h"
 
 
 /*
@@ -148,7 +149,10 @@ shutdown(void)
 {
 
 	kprintf("Shutting down.\n");
+
+#if OPT_PAGING
 	vm_shutdown();
+#endif 	/* OPT_PAGING */
 
 	vfs_clearbootfs();
 	vfs_clearcurdir();

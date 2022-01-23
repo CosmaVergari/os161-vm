@@ -39,6 +39,7 @@
 #include <segments.h>
 #include <suchvm.h>
 #include <vmstats.h>
+#include "opt-paging.h"
 
 /*
  * For general behaviour description of the following
@@ -56,21 +57,25 @@ as_create(void)
 		return NULL;
 	}
 
+#if OPT_PAGING
 	as->seg1 = NULL;
 	as->seg2 = NULL;
 	as->seg_stack = NULL;
 
 	return as;
+#endif /* OPT_PAGING */
 }
 
 int as_copy(struct addrspace *old, struct addrspace **ret)
 {
 	struct addrspace *newas;
 
+#if OPT_PAGING
 	KASSERT(old != NULL);
 	KASSERT(old->seg1 != NULL);
 	KASSERT(old->seg2 != NULL);
 	KASSERT(old->seg_stack != NULL);
+#endif /* OPT_PAGING */
 
 	newas = as_create();
 	if (newas == NULL)
@@ -78,6 +83,7 @@ int as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
+#if OPT_PAGING
 	if (!seg_copy(old->seg1, &(newas->seg1)))
 	{
 		as_destroy(newas);
@@ -97,6 +103,9 @@ int as_copy(struct addrspace *old, struct addrspace **ret)
 		as_destroy(newas);
 		return ENOMEM;
 	}
+#endif /* OPT_PAGING */
+
+	(void)old;
 
 	*ret = newas;
 	return 0;
@@ -104,6 +113,7 @@ int as_copy(struct addrspace *old, struct addrspace **ret)
 
 void as_destroy(struct addrspace *as)
 {
+#if OPT_PAGING
 	struct vnode *v;
 	KASSERT(as != NULL);
 
@@ -120,6 +130,7 @@ void as_destroy(struct addrspace *as)
 		seg_destroy(as->seg_stack);
 	if (v != NULL)
 		vfs_close(v);
+#endif /* OPT_PAGING */
 
 	kfree(as);
 }
@@ -127,8 +138,6 @@ void as_destroy(struct addrspace *as)
 void as_activate(void)
 {
 	struct addrspace *as;
-	unsigned int i;
-	int spl;
 
 	as = proc_getas();
 	if (as == NULL)
@@ -139,6 +148,10 @@ void as_activate(void)
 		 */
 		return;
 	}
+
+#if OPT_PAGING
+	unsigned int i;
+	int spl;
 
 	/* Disable interrupts on this CPU while frobbing the TLB. */
 	spl = splhigh();
@@ -152,6 +165,7 @@ void as_activate(void)
 	vmstats_inc(VMSTAT_TLB_INVALIDATE);
 
 	splx(spl);
+#endif /* OPT_PAGING */
 }
 
 void as_deactivate(void)
@@ -174,6 +188,7 @@ void as_deactivate(void)
  * moment, these are ignored. When you write the VM system, you may
  * want to implement them.
  */
+#if OPT_PAGING
 int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize, size_t file_size,
 					 off_t offset, struct vnode *v, int readable, int writeable, int executable)
 {
@@ -216,12 +231,18 @@ int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize, size_t
 	/*
 	 * Support for more than two regions is not available.
 	 */
-	kprintf("dumbvm: Warning: too many regions\n");
+	kprintf("paging: Warning: too many regions\n");
+#else
+int as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,int readable, int writeable, int executable)
+{
+#endif /* OPT_PAGING */
+
 	return ENOSYS;
 }
 
 int as_prepare_load(struct addrspace *as)
 {
+#if OPT_PAGING
 	/*	as_prepare_load is called only once
 	 * 	here prepare for segment and the relative page table, 
 	 *	that are allocated and not loaded with values
@@ -236,6 +257,9 @@ int as_prepare_load(struct addrspace *as)
 	{
 		return ENOMEM;
 	}
+#endif /* OPT_PAGING */
+
+	(void)as;
 
 	return 0;
 }
@@ -248,6 +272,7 @@ int as_complete_load(struct addrspace *as)
 
 int as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
+#if OPT_PAGING
 	KASSERT(as != NULL);
 	/* Check if the stack has not been already created */
 	KASSERT(as->seg_stack == NULL);
@@ -272,10 +297,14 @@ int as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 
 	/* Initial user-level stack pointer */
 	*stackptr = USERSTACK;
+#endif /* OPT_PAGING */
+
+	(void)as;
 
 	return 0;
 }
 
+#if OPT_PAGING
 struct prog_segment *as_find_segment(struct addrspace *as, vaddr_t vaddr)
 {
 
@@ -367,3 +396,5 @@ struct prog_segment *as_find_segment_coarse(struct addrspace *as, vaddr_t vaddr)
 
 	return ps;
 }
+
+#endif

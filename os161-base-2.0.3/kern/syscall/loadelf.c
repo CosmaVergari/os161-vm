@@ -59,9 +59,9 @@
 #include <addrspace.h>
 #include <vnode.h>
 #include <elf.h>
-#include "opt-suchvm.h"
+#include "opt-paging.h"
 
-#ifndef OPT_SUCHVM
+#if !OPT_PAGING
 /*
  * Load a segment at virtual address VADDR. The segment in memory
  * extends from VADDR up to (but not including) VADDR+MEMSIZE. The
@@ -146,7 +146,7 @@ load_segment(struct addrspace *as, struct vnode *v,
 
 	return result;
 }
-#endif 	/* ifndef OPT_SUCHVM */
+#endif 	/* if  !OPT_PAGING */
 
 /*
  * Load an ELF executable user program into the current address space.
@@ -247,6 +247,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 		}
 
 		/* modified version to pass the offset */
+#if OPT_PAGING
 		result = as_define_region(as,
 					  ph.p_vaddr, ph.p_memsz,
 					  ph.p_filesz,
@@ -255,6 +256,13 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 					  ph.p_flags & PF_R,
 					  ph.p_flags & PF_W,
 					  ph.p_flags & PF_X);
+#else
+		result = as_define_region(as,
+					  ph.p_vaddr, ph.p_memsz,
+					  ph.p_flags & PF_R,
+					  ph.p_flags & PF_W,
+					  ph.p_flags & PF_X);
+#endif /* OPT_PAGING */
 		if (result) {
 			return result;
 		}
@@ -265,7 +273,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 		return result;
 	}
 
-#ifndef OPT_SUCHVM
+#if  !OPT_PAGING
 	/*
 	 * Now actually load each segment.
 	 */
@@ -303,7 +311,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 			return result;
 		}
 	}
-#endif	/* OPT_SUCHVM */
+#endif	/* OPT_PAGING */
 
 	result = as_complete_load(as);
 	if (result) {

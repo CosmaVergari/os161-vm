@@ -449,12 +449,12 @@ optfile net	test/nettest.c
 #                                      #
 ########################################
 
-defoption suchvm
-optfile suchvm vm/coremap.c
-optfile suchvm vm/pt.c
-optfile suchvm vm/segments.c
-optfile suchvm vm/suchvm.c
-optfile suchvm syscall/proc_syscalls.c
-optfile suchvm syscall/file_syscalls.c
-optfile suchvm vm/swapfile.c
-optfile suchvm vm/vmstats.c
+defoption paging
+optfile paging vm/coremap.c
+optfile paging vm/pt.c
+optfile paging vm/segments.c
+optfile paging vm/suchvm.c
+optfile paging syscall/proc_syscalls.c
+optfile paging syscall/file_syscalls.c
+optfile paging vm/swapfile.c
+optfile paging vm/vmstats.c

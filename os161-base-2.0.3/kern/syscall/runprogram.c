@@ -91,7 +91,9 @@ runprogram(char *progname)
 	 *	Not called here because we need the file reference for 
 	 *	on demand paging. 
 	 */
-	//vfs_close(v);
+#if !OPT_PAGING
+	vfs_close(v);
+#endif
 
 	/* Define the user stack in the address space */
 	result = as_define_stack(as, &stackptr);

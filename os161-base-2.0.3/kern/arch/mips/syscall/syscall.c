@@ -36,7 +36,7 @@
 #include <current.h>
 #include <syscall.h>
 
-#include "opt-suchvm.h"
+#include "opt-paging.h"
 
 /*
  * System call dispatcher.
@@ -110,7 +110,7 @@ void syscall(struct trapframe *tf)
 						 (userptr_t)tf->tf_a1);
 		break;
 
-#ifdef OPT_SUCHVM
+#if OPT_PAGING
 	case SYS_write:
 		retval = sys_write((int)tf->tf_a0,
 				(userptr_t)tf->tf_a1,
