@@ -8,7 +8,7 @@ date: 23th January 2022
 
 # Theorical introduction
 
-This is an implementation of the project 1 by G. Cabodi. It implements _demand paging_, _swapping_ and provides _statistics_ on the performance of the virtual memory manager. It completely replaces DUMBVM.
+This is an implementation of the project 1 by G. Cabodi. It implements *demand paging*, *swapping* and provides *statistics* on the performance of the virtual memory manager. It completely replaces DUMBVM.
 
 ## On-demand paging
 
@@ -21,9 +21,9 @@ A page is the atomic unit managed by the virtual memory manager, on the other ha
 
 This event is triggered by the TLB and uses information about the current state of the memory and structures like page tables and swapfiles to accomplish the address translation.
 
-The whole concept of **on-demand paging** allows to avoid un-necessary I\O operations and a more efficient usage of memory. In this frame of reference, we implemented a **_lazy swapper_**.
+The whole concept of **on-demand paging** allows to avoid un-necessary I\O operations and a more efficient usage of memory. In this frame of reference, we implemented a ***lazy swapper***.
 
-Our virtual memory manager is called _SuchVM_.
+Our virtual memory manager is called *SuchVM*.
 
 # os161 process implementation
 
@@ -71,9 +71,9 @@ In the `vm_fault` function the flow is the following :
 
 The whole memory can be represented as a collection of pages that are in different states. A page can be:
 
-- _untracked_: if the memory manager has not the control over that page yet
-- _occupied_: if the memory manager is aware of the page and it has been allocated for a user or kernel process
-- _free_: if the memory manager is aware of the page but nobody is using it
+- *untracked*: if the memory manager has not the control over that page yet
+- *occupied*: if the memory manager is aware of the page and it has been allocated for a user or kernel process
+- *free*: if the memory manager is aware of the page but nobody is using it
 
 os161 by default has a function in `ram.c` called `ram_stealmem()` that returns the physical address of a frame that has never been used before. This form of tracking is not enough for our purposes, so we created an array of structures `struct coremap_entry`, 1 entry for each existing page of memory.
 
@@ -91,16 +91,16 @@ struct coremap_entry {
 };
 ```
 
-_NOTE: For more details on the data structure or the behaviour of a function or module, please refer to the source file indicated in the code blocks_
+*NOTE: For more details on the data structure or the behaviour of a function or module, please refer to the source file indicated in the code blocks*
 
 `entry_type` is used to keep track of the state of the page and its possible values ( `#define constants`) are defined in coremap.h. `allocSize` instead keeps track of how many pages after the current one are allocated.
 These 2 fields in all entries can produce a good representation of memory at a given point. And with those we can allocate memory, free it and later reuse some freed pages searched with an appropriate algorithm.
 
-These fields are enough to keep track of _kernel_ memory pages, however for _user processes_ memory pages we need more information. In particular we added `vaddr` and `as`. `as` is a reference to the `struct addrspace` of the _user_ process that has requested this page, while `vaddr` is the virtual address of the beginning of the page.
+These fields are enough to keep track of *kernel* memory pages, however for *user processes* memory pages we need more information. In particular we added `vaddr` and `as`. `as` is a reference to the `struct addrspace` of the *user* process that has requested this page, while `vaddr` is the virtual address of the beginning of the page.
 
-The array of `struct coremap_entry` is defined in _kern/vm/coremap.c_ as a static variable *static struct coremap_entry \*coremap*, and allocated in `coremap_init()` with a length of _(number of RAM frames/page size)_.
+The array of `struct coremap_entry` is defined in *kern/vm/coremap.c* as a static variable *static struct coremap_entry \*coremap*, and allocated in `coremap_init()` with a length of *(number of RAM frames/page size)*.
 
-But how do we obtain the physical address of the page? If we consider the beginning of the `coremap` array as the address `0x00000000` in memory, and that each `coremap_entry` corresponds to a page of size `PAGE_SIZE` (defined in _kern/arch/mips/include/vm.h_ as 4096 bytes), then for the i-th entry the **physical address** will be:
+But how do we obtain the physical address of the page? If we consider the beginning of the `coremap` array as the address `0x00000000` in memory, and that each `coremap_entry` corresponds to a page of size `PAGE_SIZE` (defined in *kern/arch/mips/include/vm.h* as 4096 bytes), then for the i-th entry the **physical address** will be:
 
 ```C
     paddr = i * PAGE_SIZE
@@ -122,7 +122,7 @@ Any user program is divided in different parts that serve different purposes at 
 - **data** segment
 - **stack** segment
 
-The code segment contains the actual machine code that will be executed by the processor when the process starts executing. Inside this segment there is a so called **entrypoint** that is the _first_ instruction of the program. This segment must be **readonly** and we will see how to enforce this later on ( [suchvm](#suchvm)).
+The code segment contains the actual machine code that will be executed by the processor when the process starts executing. Inside this segment there is a so called **entrypoint** that is the *first* instruction of the program. This segment must be **readonly** and we will see how to enforce this later on ( [suchvm](#suchvm)).
 
 The data segment contains the data that is used by the program during its execution. For example the memory space allocated to variables is part of this segment. This segment must be **read-write** to allow variables to be read and written back.
 
@@ -159,7 +159,7 @@ Here is a brief description of each field:
 
 In order to manage cleanly the creation and destruction of such struct we created 3 appropriate methods called `seg_create()`, `seg_copy()`, `seg_destroy()`, whose behaviour is pretty straightforward. The actual declaration of the properties of the segment is done inside `seg_define()` and `seg_define_stack()` which are called at process creation time. The distinction between the two functions is because code and data segments are loaded from file, while the stack segment is not. The `seg_prepare()` function allocates a page table `n_pages` long to accomodate the address translation later on.
 
-At this point the kernel is aware of all the properties of a segment, however no actual RAM has been allocated. This is a normal behaviour in demand paging because the memory will be occupied only whenever the process actually accesses it, always in a _page granularity_. When a page is loaded in memory we will say that it is _resident_ in memory.
+At this point the kernel is aware of all the properties of a segment, however no actual RAM has been allocated. This is a normal behaviour in demand paging because the memory will be occupied only whenever the process actually accesses it, always in a *page granularity*. When a page is loaded in memory we will say that it is *resident* in memory.
 
 In the case of code and data segments, after an access to a page that is not resident in memory, the appropriate page needs to be read from the ELF file. This task is accomplished by the function `seg_load_page()`.
 
@@ -169,21 +169,25 @@ The `seg_load_page()` is one of the most important functions in the whole memory
 
 - The page to be loaded is the first of the `n_pages`
 - The page to be loaded is the last of the `n_pages`
-- The page to be loaded is in the middle of the virtual address range _(0 < page_index < n_pages-1)_
+- The page to be loaded is in the middle of the virtual address range *(0 < page_index < n_pages-1)*
 
-These cases can be distinguished by checking where `vaddr` falls in the segment declared virtual address range. Depending on the case, the kernel makes a calculation on the 3 parameters required for the following _read_ operation that are: the destination physical address adjusted for internal offset, the offset in file to read at, and the length of the data to read from file.
+These cases can be distinguished by checking where `vaddr` falls in the segment declared virtual address range. Depending on the case, the kernel makes a calculation on the 3 parameters required for the following *read* operation that are:
+- the destination physical address adjusted for internal offset
+- the offset in file to read at 
+-  the length of the data to read from file
+
 To have a more detailed explanation on how these parameters are calculated, have a look at the implementation of the function in the `segments.c` file.
 
 At this point, the frame is completely zeroed, and the `VOP_READ` operation is triggered, effectively loading from disk to memory.
 
 ### Remaining functions
 
-The remaining functions declared in the segments.c file deal with the management of the `pagetable` struct, adding and getting entries from it, but also there are some functions dedicated to the support of the _swapping_ operations, but we will see them in more detail while talking about the architecture of _swapping_.
+The remaining functions declared in the segments.c file deal with the management of the `pagetable` struct (see [pagetable](#page-table)), adding and getting entries from it, but also there are some functions dedicated to the support of the *swapping* operations (more details in the [swapping](#swapfile) section)
 
 
 ## addrspace
 
-The address space of a program che be represented as a collection of segments, in particular in os161 they are usually three , the code segment, the data segment and the stack segment. So we decided to use the address space structure as a contanier for the three segments structure, as shown below.
+The address space of a program can be represented as a collection of segments, in particular in os161 they are usually three: the *code segment*, the *data segment* and the *stack segment*. So we decided to use the address space structure as a contanier for the three segments structure, as shown below.
 
 ```C
 struct addrspace {
