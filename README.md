@@ -44,21 +44,23 @@ The parts analized and modified are the ones regarding `runprogram`,`loadelf` an
 
 ### runprogram
 
-In the `runprogram` function, the program file is opened using `vfs_open`, and then a new address space is created and activated ( using `as_create` and `as_activate`) (see [addrspace](#addrspace) section). The process segments are defined by the `load_elf` function and the user stack is defined through `as_define_stack`, then the new process is started ( `enter_new_process` ). The major change to this function has been leaving the ELF program file open during the whole execution of the program. So there is no call to `vfs_close`, which instead will be executed only when the program terminates its execution (in `as_destroy`).
+In the `runprogram` function, the program file is opened using `vfs_open`, and then a new address space is created and activated ( using `as_create` and `as_activate`) (see [addrspace](#addrspace) section). The process segments are defined in the `load_elf` function and the user stack is defined through `as_define_stack`, then the new process is started ( `enter_new_process` ).
+
+The major change to `runprogram()` has been leaving the ELF program file open during the whole execution of the program. So there is no call to `vfs_close`, which instead will be executed only when the program terminates its execution (in `as_destroy`).
 
 ### loadelf
 
-The `load_elf` function was previously used to load the entire file in the memory; but following the policy of the on demand paging there is no need to do that. Our solution does not use the function `load_segment` in the loadelf.c file to load the segments in memory but simply reads the executable header and define the regions of the address space using `as_define_region` and prepare it through `as_prepare_load` (see [addrspace](#addrspace) and [segments](#segments) sections). The function returns the entrypoint that will be used to start the process.
+The `load_elf` function was previously used to load the entire file in the memory; but following the policy of the on demand paging there is no need to do that. Our solution does not use the function `load_segment` in the loadelf.c file to load the segments from disk but simply reads the executable header and defines the regions of the address space using `as_define_region` and prepares them through `as_prepare_load` (see [addrspace](#addrspace) and [segments](#segments) sections). The function returns the entrypoint that will be used to start the process.
 
 ### Flow of page loading from TLB fault
 
-When there is a TLB miss, this event is managed by `vm_fault` ( in [suchvm.c](#suchvm)). In `vm_fault` each time a new correspondance virtual to physcal address is saved in the TLB using a round robin algorithm to select the victim.
+the TLB miss event is managed by `vm_fault()` (defined in [suchvm.c](#suchvm)). In `vm_fault()`, each time a new virtual to physical address correspondence is saved in the TLB using a round robin algorithm to select the victim.
 During the whole process, the event of saving a new page in memory is managed by the coremap (see [coremap](#coremap) section) using `alloc_upage` function.
 
 In the `vm_fault` function the flow is the following :
 
 - The current address space structure is retrieved and then the segment associated to the fault address ( `proc_getas` , `as_find_segment`)( see [addrspace](#addrspace) section)
-- There is the attempt to get physical address of the current fault address (`seg_get_paddr`)(see [segments](#segments) section)):
+- There is the attempt to get physical address of the current fault address (`seg_get_paddr` in [segments section](#segments)):
   - If there is no correspondance, a new page is loaded from the file and allocated in memory (`seg_load_page`)
   - If that page has been swapped out previously,there is the swap-in from the swap file and the page is allocated in the main memory (`seg_swap_in`)
 - At this point if in the page table there was not present an entry, a new one is created (`seg_add_pt_entry`)
