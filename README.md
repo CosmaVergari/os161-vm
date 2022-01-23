@@ -56,28 +56,16 @@ Our solution does not use the function `load_segment()` from `loadelf.c` file to
 
 ### Flow of page loading from TLB fault
 
-<<<<<<< HEAD
 The TLB miss event is managed by `vm_fault()` (defined in [suchvm.c](#suchvm)). Every time `vm_fault()` is called, a new virtual to physical address correspondence is saved in the TLB using a round robin algorithm to eventually select the victim.
-=======
-the TLB miss event is managed by `vm_fault()` (defined in [suchvm.c](#suchvm)). In `vm_fault()`, each time a new virtual to physical address correspondence is saved in the TLB using a round robin algorithm to select the victim.
->>>>>>> c1cd04a74cd80924aa78ed2bea9cd7e5f2b6034c
 In all cases, the coremap intervenes by allocating a page for the user process via the `alloc_upage()` function (see [coremap](#coremap) section).
 
 In the `vm_fault` function the flow is the following :
 
-<<<<<<< HEAD
 - The current address space structure is retrieved and then the segment associated to the fault address (see `proc_getas()` , `as_find_segment()` in [addrspace](#addrspace) section)
 - There is an attempt to get physical address of the current fault address from the page table (`seg_get_paddr()` in [segments section](#segments)):
   - If there is no correspondance, a new page is allocated in memory and loaded from the file (`seg_load_page()`)
   - If that page has been swapped out previously, a page is allocated in the main memory and then a swap-in from the swap file takes place (`seg_swap_in()`)
 - At this point if the page table didn't have the correct or any translation entry, a new one is created (`seg_add_pt_entry()`)
-=======
-- The current address space structure is retrieved and then the segment associated to the fault address ( `proc_getas()` , `as_find_segment()`)( see [addrspace](#addrspace) section)
-- There is an attempt to get physical address of the current fault address (`seg_get_paddr()` in [segments section](#segments)):
-  - If there is no correspondance, a new page is loaded from the file and allocated in memory (`seg_load_page`)
-  - If that page has been swapped out previously, there is the swap-in from the swap file and the page is allocated in the main memory (`seg_swap_in`)
-- At this point if in the page table there was not present an entry, a new one is created (`seg_add_pt_entry`)
->>>>>>> c1cd04a74cd80924aa78ed2bea9cd7e5f2b6034c
 
 # Implementation
 
@@ -136,11 +124,7 @@ Any user program is divided in different parts that serve different purposes at 
 - **data** segment
 - **stack** segment
 
-<<<<<<< HEAD
 The code segment contains the actual machine code that will be executed by the processor when the process starts executing. Inside this segment there is a so called **entrypoint** that is the *first* instruction of the program. This segment must be **readonly** and we will see how to enforce this later on ([suchvm](#suchvm)).
-=======
-The code segment contains the actual machine code that will be executed by the processor when the process starts executing. Inside this segment there is a so called **entrypoint** that is the _first_ instruction of the program. This segment must be **readonly** and we will see how to enforce this later on ( [suchvm](#suchvm)).
->>>>>>> c1cd04a74cd80924aa78ed2bea9cd7e5f2b6034c
 
 The data segment contains the data that is used by the program during its execution. For example the memory space allocated to variables is part of this segment. This segment must be **read-write** to allow variables to be read and written back.
 
@@ -189,7 +173,6 @@ The `seg_load_page()` is one of the most important functions in the whole memory
 
 - The page to be loaded is the first of the `n_pages`
 - The page to be loaded is the last of the `n_pages`
-<<<<<<< HEAD
 - The page to be loaded is in the middle of the virtual address range *(0 < page_index < n_pages-1)*
 
 These cases can be distinguished by checking where `vaddr` falls in the segment declared virtual address range. Depending on the case, the kernel makes a calculation on the 3 parameters required for the following *read* operation that are:
@@ -199,31 +182,16 @@ These cases can be distinguished by checking where `vaddr` falls in the segment 
 - the length of the data to read from file
 
 To have a more detailed explanation on how these parameters are calculated, have a look at the implementation of the function in the `kern/vm/segments.c` file.
-=======
-- The page to be loaded is in the middle of the virtual address range _(0 < page_index < n_pages-1)_
-
-These cases can be distinguished by checking where `vaddr` falls in the segment declared virtual address range. Depending on the case, the kernel makes a calculation on the 3 parameters required for the following _read_ operation that are: the destination physical address adjusted for internal offset, the offset in file to read at, and the length of the data to read from file.
-To have a more detailed explanation on how these parameters are calculated, have a look at the implementation of the function in the `segments.c` file.
->>>>>>> c1cd04a74cd80924aa78ed2bea9cd7e5f2b6034c
 
 At this point, the frame is completely zeroed, and the `VOP_READ()` operation is triggered, effectively loading from disk to memory.
 
 ### Remaining functions
 
-<<<<<<< HEAD
 The remaining functions declared in the `segments.c` file deal with the management of the `pagetable` struct (see [pagetable](#page-table)), adding and getting entries from it, but also there are some functions dedicated to the support of the *swapping* operations (more details in the [swapping](#swapfile) section)
 
 ## addrspace
 
 The address space of a program can be represented as a collection of segments, in particular in os161 they are three: the *code segment*, the *data segment* and the *stack segment*. So we decided to use the address space structure as a contanier for the three segments structure, as shown below.
-=======
-The remaining functions declared in the segments.c file deal with the management of the `pagetable` struct, adding and getting entries from it, but also there are some functions dedicated to the support of the _swapping_ operations, but we will see them in more detail while talking about the architecture of _swapping_.
-
-
-## addrspace
-
-The address space of a program che be represented as a collection of segments, in particular in os161 they are usually three , the code segment, the data segment and the stack segment. So we decided to use the address space structure as a contanier for the three segments structure, as shown below.
->>>>>>> c1cd04a74cd80924aa78ed2bea9cd7e5f2b6034c
 
 ```C
 /* kern/include/addrspace.h */
