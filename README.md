@@ -46,7 +46,7 @@ In `runprogram` the program file is opened using `vfs_open`, and then a new addr
 
 ### loadelf
 
-The `load_elf` function was used to load the entire file in the memory, but following the policy of the on demand paging there is no need to do that. Our solution does not use the function `load_segment` in the loadelf.c file to load the segments in memory but simply reads the executable header and define the regions of the address space using `as_define_region` and prepare it through `as_prepare_load`. The function returns the entrypoint that will be used to start the process.
+The `load_elf` function was previously used to load the entire file in the memory; but following the policy of the on demand paging there is no need to do that. Our solution does not use the function `load_segment` in the loadelf.c file to load the segments in memory but simply reads the executable header and define the regions of the address space using `as_define_region` and prepare it through `as_prepare_load` (see [addrspace](#addrspace) and [segments](#segments) sections). The function returns the entrypoint that will be used to start the process.
 
 ### Flow of page loading from TLB fault
 
@@ -151,8 +151,6 @@ Here is a brief description of each field:
 - `elf_vnode` a reference to the ELF file by which this segment was declared
 - `pagetable` a pointer to a struct pagetable (TODO: Aggiungi link a classe pagetable) that will be used at address translation (better explanation later on)
 
-TODO: Bisogna fare riferimento a questa sezione quando si parla del caricamento da file?
-
 In order to manage cleanly the creation and destruction of such struct we created 3 appropriate methods called `seg_create()`, `seg_copy()`, `seg_destroy()`, whose behaviour is pretty straightforward. The actual declaration of the properties of the segment is done inside `seg_define()` and `seg_define_stack()` which are called at process creation time. The distinction between the two functions is because code and data segments are loaded from file, while the stack segment is not. The `seg_prepare()` function allocates a page table `n_pages` long to accomodate the address translation later on.
 
 At this point the kernel is aware of all the properties of a segment, however no actual RAM has been allocated. This is a normal behaviour in demand paging because the memory will be occupied only whenever the process actually accesses it, always in a _page granularity_. When a page is loaded in memory we will say that it is _resident_ in memory.
@@ -215,10 +213,10 @@ This is the class where most of the pieces come together, it contains:
 
 Let's start with point (1). There are 2 functions that are involved: `vm_bootstrap()` and `vm_shutdown()`.
 
-TODO: Update the links
+TODO: TLB replacement test
 TODO: Add in shutdown the deallocation of coremap
 
-`vm_bootstrap()` is the VM bootstrap function and it contains the necessary initialization to make the VM work. This consists in the initialization of the [`coremap` class](#coremap), of the [`swap` class](#swapfile), of the [`vmstats` class](#vmstatsTODO) used for statistics and of the [TLB replacement algorithm](#tlb-replacement-algorithm). This function is called by `boot()` in _kern/main/main.c_, that contains the initialization sequence of the kernel.
+`vm_bootstrap()` is the VM bootstrap function and it contains the necessary initialization to make the VM work. This consists in the initialization of the [`coremap` class](#coremap), of the [`swap` class](#swapfile), of the [`vmstats` class](#statistics) used for statistics and of the [TLB replacement algorithm](#tlb-replacement-algorithm). This function is called by `boot()` in _kern/main/main.c_, that contains the initialization sequence of the kernel.
 
 On the other hand, `vm_shutdown()` is the VM shutdown function and it is the specular of the bootstrap, containing the functions deallocating the resources used by the VM. This function is called by the `shutdown()` function also defined in _kern/main/main.c_, that gets executed when the machine is powering off.
 
@@ -401,6 +399,8 @@ In case (3), the memory manager doesn't need to perform any other operation, the
     return 0;
 }
 ```
+
+### TLB replacement algorithm
 
 This portion of code is dedicated to the TLB management now that the logical -> physical translation is available. First of all we get the index of the TLB entry where we should save the next entry using the `tlb_get_rr_victim()` function, that implements a Round-Robin algorithm to actually compute the index. This function looks like:
 

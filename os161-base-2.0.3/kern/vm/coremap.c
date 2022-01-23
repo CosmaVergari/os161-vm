@@ -56,6 +56,7 @@ void coremap_init(void)
 		coremap[i].prev_allocated = const_invalid_reference;
 	}
 
+	/* Initialize linked list variables */
 	const_invalid_reference = nRamFrames;
 	last_alloc = const_invalid_reference;
 	victim = const_invalid_reference;
@@ -63,6 +64,17 @@ void coremap_init(void)
 	spinlock_acquire(&coremap_lock);
 	coremapActive = 1;
 	spinlock_release(&coremap_lock);
+}
+
+void coremap_shutdown(void) {
+	spinlock_acquire(&coremap_lock);
+	coremapActive = 0;
+	spinlock_release(&coremap_lock);
+	/*
+	 * we can't acquire the lock because it is needed by
+	 * the kfree()
+	 */
+	kfree(coremap);
 }
 
 /* 

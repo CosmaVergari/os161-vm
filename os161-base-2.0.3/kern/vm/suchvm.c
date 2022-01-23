@@ -212,6 +212,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 
 void vm_shutdown(void){
     swap_shutdown();
+    coremap_shutdown();
     vmstats_print();
 }
 
