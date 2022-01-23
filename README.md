@@ -1,8 +1,10 @@
 ---
-title: os161-suchvm
+title: Project 1 - os161 demand paging and swapping
 author: Francesco Capano (s284739), Cosma Alex Vergari (s284922)
-date: Ciccio
+date: 23th January 2022
 ---
+
+\newpage
 
 # Theorical introduction
 
@@ -267,23 +269,13 @@ In this latter case we want the calling process to terminate, as required by the
 ```C
     if (curproc == NULL)
     {
-        /*
-		 * No process. This is probably a kernel fault early
-		 * in boot. Return EFAULT so as to panic instead of
-		 * getting into an infinite faulting loop.
-		 */
         return EFAULT;
     }
 
 
-    /* Get current running address space structure */
     as = proc_getas();
     if (as == NULL)
     {
-        /*
-		 * No address space set up. This is probably also a
-		 * kernel fault early in boot.
-		 */
         return EFAULT;
     }
 
@@ -311,9 +303,6 @@ Finally, we try to distinguish which **segment** of the running process is the s
 
     if (paddr == PT_UNPOPULATED_PAGE)
     {
-        /*
-         * Alloc one page in coremap and add to page table
-         */
         paddr = alloc_upage(page_aligned_faultaddress);
         seg_add_pt_entry(ps, faultaddress, paddr);
         if (ps->permissions == PAGE_STACK)
@@ -326,14 +315,9 @@ Finally, we try to distinguish which **segment** of the running process is the s
     }
     else if (paddr == PT_SWAPPED_PAGE)
     {
-        /*
-         * Alloc one page in coremap swap in and update the page table
-         * (inside seg_swap_in())
-         */
         paddr = alloc_upage(page_aligned_faultaddress);
         seg_swap_in(ps, faultaddress, paddr);
     } else{
-        /* Page already in the memory */
         vmstats_inc(VMSTAT_TLB_RELOAD);
     }
 
@@ -381,12 +365,10 @@ In case (3), the memory manager doesn't need to perform any other operation, the
 
     entry_hi = page_aligned_faultaddress;
     entry_lo = paddr | TLBLO_VALID;
-    /* If writes are permitted set the DIRTY bit (see tlb.h) */
     if (ps->permissions == PAGE_RW || ps->permissions == PAGE_STACK)
     {
         entry_lo = entry_lo | TLBLO_DIRTY;
     }
-    DEBUG(DB_VM, "suchvm: 0x%x -> 0x%x\n", page_aligned_faultaddress, paddr);
 
     tlb_read(&old_hi, &old_lo, tlb_index);
     if (old_lo & TLBLO_VALID){
@@ -401,6 +383,7 @@ In case (3), the memory manager doesn't need to perform any other operation, the
     return 0;
 }
 ```
+
 This portion of code is dedicated to the TLB management now that the logical -> physical translation is available. First of all we get the index of the TLB entry where we should save the next entry using the `tlb_get_rr_victim()` function, that implements a Round-Robin algorithm to actually compute the index. This function looks like:
 
 ```C
@@ -514,12 +497,18 @@ In order to compute the stats on page faults and the swap we created an array of
 #define VMSTAT_TLB_FAULT_FREE         1     // Faults whithout replacement in the TLB
 #define VMSTAT_TLB_FAULT_REPLACE      2     // Faults whithout replacement in the TLB
 #define VMSTAT_TLB_INVALIDATE         3     // TLB invalidations
-#define VMSTAT_TLB_RELOAD             4     // TLB misses for pages that were already in memory
-#define VMSTAT_PAGE_FAULT_ZERO        5     // TLB misses that required a new page to be zero-filled
-#define VMSTAT_PAGE_FAULT_DISK        6     // TLB misses that required a page to be loaded from disk
-#define VMSTAT_ELF_FILE_READ          7     // Page faults that require getting a page from the ELF file
-#define VMSTAT_SWAP_FILE_READ         8     // Page faults that require getting a page from the swap file
-#define VMSTAT_SWAP_FILE_WRITE        9     // Page faults that require writing a page to the swap file
+#define VMSTAT_TLB_RELOAD             4     // TLB misses for pages that were already 
+                                            // in memory
+#define VMSTAT_PAGE_FAULT_ZERO        5     // TLB misses that required a new page to 
+                                            // be zero-filled
+#define VMSTAT_PAGE_FAULT_DISK        6     // TLB misses that required a page to be 
+                                            // loaded from disk
+#define VMSTAT_ELF_FILE_READ          7     // Page faults that require getting a page
+                                            // from the ELF file
+#define VMSTAT_SWAP_FILE_READ         8     // Page faults that require getting a page
+                                            // from the swap file
+#define VMSTAT_SWAP_FILE_WRITE        9     // Page faults that require writing a page 
+                                            // to the swap file
 ```
 
 To access to the stats and modify the array you need a spinlock (`stats_lock`) that ensures the atomicity of the operation, except for the time when the stats are showed by `vmstats_print` at the shutdown when the atomicity is ensured by the fact that no other process is running. In this function, also the following checks are fulfilled :
