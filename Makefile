@@ -28,5 +28,10 @@ run:
 	sys161 kernel-SUCHVM
 
 pdf:
-	pandoc README.md -o ../report.pdf
+	pandoc README.md \
+		-V linkcolor:blue \
+		-V geometry:a4paper \
+		-V geometry:margin=3cm \
+		--toc \
+		-o ../report.pdf
 	evince ../report.pdf
