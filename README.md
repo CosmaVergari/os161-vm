@@ -516,6 +516,7 @@ kernel tests da mettere ? :
 - km1
 - km2
 
+TODO run the test and put the numbers
 Below is report a table with the statistics for each test
 
 ||TLB Faults|TLB Faults with Free|TLB Faults with Replace|TLB Invalidations|TLB Reloads|Page Faults (zero filled)|Page Faults (disk)|ELF File Read|Swapfile Read|Swapfile Writes|
