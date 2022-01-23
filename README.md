@@ -365,12 +365,14 @@ In case (1), the memory manager needs to:
 In case (2), the memory manager needs to:
 
 - allocate a free physical frame to the process, this is done by the function `alloc_upage()` defined in [`coremap.c`](#coremap); its physical address is held in `paddr`
-- perform a swap in the requesting segment. This is analyzed in the [swapping section](#swapping)
-<!-- TODO: Check link -->
+- perform a swap in the requesting segment. This is analyzed in the [swapping section](#swapfile)
 
 In case (3), the memory manager doesn't need to perform any other operation, the physical address is already available in the variable `paddr` returned from the page table and the physical frame is already filled with the correct data.
 
+### TLB replacement algorithm
+
 ```C
+/* Ending part of vm_fault */
     vmstats_inc(VMSTAT_TLB_FAULT);
     /* Disable interrupts on this CPU while frobbing the TLB. */
     spl = splhigh();
@@ -386,10 +388,11 @@ In case (3), the memory manager doesn't need to perform any other operation, the
     }
     DEBUG(DB_VM, "suchvm: 0x%x -> 0x%x\n", page_aligned_faultaddress, paddr);
 
-    if ( tlb_probe(entry_hi, 0) < 0){
-        vmstats_inc(VMSTAT_TLB_FAULT_FREE);
-    }else{
+    tlb_read(&old_hi, &old_lo, tlb_index);
+    if (old_lo & TLBLO_VALID){
         vmstats_inc(VMSTAT_TLB_FAULT_REPLACE);
+    } else {
+        vmstats_inc(VMSTAT_TLB_FAULT_FREE);
     }
 
     tlb_write(entry_hi, entry_lo, tlb_index);
@@ -398,9 +401,6 @@ In case (3), the memory manager doesn't need to perform any other operation, the
     return 0;
 }
 ```
-
-### TLB replacement algorithm
-
 This portion of code is dedicated to the TLB management now that the logical -> physical translation is available. First of all we get the index of the TLB entry where we should save the next entry using the `tlb_get_rr_victim()` function, that implements a Round-Robin algorithm to actually compute the index. This function looks like:
 
 ```C
@@ -552,6 +552,9 @@ These are the tests in testbin that we ran :
 - huge
 - matmult
 - faulter modified (faulterro)
+- tlbreplace (created)
+
+We added the `tlbreplace` test that tries to cause a TLB replace, knowing the overall architecture.
 
 We also modified the size of the swap file and ran `matmult` to check if a _kernel panic_ is raised because the size of the logical address space is greater than the sum of the physical memory and swap file sizes.
 
@@ -577,6 +580,8 @@ Below is report a table with the statistics for each test
 The _faulter_ test tries to access an address that may be outside of the process address space boundaries. The _faulterro_ test attempts to write to a _read-only_ memory region within its boundaries. Both return segmentation fault and the process is killed, however the kernel does not panic.
 
 In the _swapfile kernel panic_ test the kernel panic is succesfully raised.
+
+The `tlbreplace` test returns a TLB replace stat of *2*. This *2* is because after the TLB is filled, the first entry (code page) is overwritten (+1). Since the code is then needed, another page fault is issued and another entry is replaced (+1). 
 
 # Workload division
 
