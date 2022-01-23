@@ -552,6 +552,9 @@ These are the tests in testbin that we ran :
 - huge
 - matmult
 - faulter modified (faulterro)
+- tlbreplace (created)
+
+We added the `tlbreplace` test that tries to cause a TLB replace, knowing the overall architecture.
 
 We also modified the size of the swap file and ran `matmult` to check if a _kernel panic_ is raised because the size of the logical address space is greater than the sum of the physical memory and swap file sizes.
 
@@ -577,6 +580,8 @@ Below is report a table with the statistics for each test
 The _faulter_ test tries to access an address that may be outside of the process address space boundaries. The _faulterro_ test attempts to write to a _read-only_ memory region within its boundaries. Both return segmentation fault and the process is killed, however the kernel does not panic.
 
 In the _swapfile kernel panic_ test the kernel panic is succesfully raised.
+
+The `tlbreplace` test returns a TLB replace stat of *2*. This *2* is because after the TLB is filled, the first entry (code page) is overwritten (+1). Since the code is then needed, another page fault is issued and another entry is replaced (+1). 
 
 # Workload division
 

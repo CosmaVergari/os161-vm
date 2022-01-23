@@ -28,17 +28,14 @@
  */
 
 /*
- * faulter.c
+ * tlbreplace.c
  *
- * 	Tries to access an illegal address.
- *
- * When the system calls assignment is complete, this should run and
- * get killed without causing the kernel to panic.
+ * 	Tries to perform enough page faults to cause a TLB entry to invalidate
  */
 
 #include <stdio.h>
 
-#define NUM_TLB 64
+#define NUM_TLB 64		/* Update with platform sizes if needed */
 #define PAGE_SIZE 4096
 #define BYTES_FOR_TLB_REPLACE (NUM_TLB * PAGE_SIZE)
 
@@ -49,6 +46,7 @@ main(void)
 {
 	int i;
 	for (i=0; i<NUM_TLB; i++) {
+		/* Cause a page fault */
 		megaarray[i*PAGE_SIZE] = 'A';
 	}
 	return 0;
