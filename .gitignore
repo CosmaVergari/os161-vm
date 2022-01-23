@@ -3,3 +3,4 @@ tools/
 doxygen/
 .vscode/
 root/SWAPFILE
+dev_notes.md

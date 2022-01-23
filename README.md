@@ -1,7 +1,7 @@
 ---
 title: Project 1 - os161 demand paging and swapping
 author: Francesco Capano (s284739), Cosma Alex Vergari (s284922)
-date: 23th January 2022
+date: 23rd January 2022
 ---
 
 \newpage
@@ -221,7 +221,7 @@ The function `as_activate()` is used to activate the address space, and in parti
 
 The function `as_find_segment()` is used to retrieve the proper segment inside the current address space where the required address is located. It checks that the virtual address passed is inside the boundaries of the current adress space. There are 2 versions of this function, the first called `as_find_segment()`, finds the segment by precisely checking if `vaddr` is between the start and the end address (defined as `base_vaddr + mem_size`) of one of the segments. 
 
-The second one is `as_find_segment_coarse()` which finds the segment by checking if `vaddr` is between the **page-aligned**  boundaries of one of the segments (`base_vaddr` -> `base_vaddr + n_pages * PAGE_SIZE`). This is used in the swap out operation because the requested address comes from the coremap and so it is page aligned. The problem arises because the actual boundaries of any segment may not be page aligned.
+The second one is `as_find_segment_coarse()` which finds the segment by checking if `vaddr` is between the **page-aligned**  boundaries of one of the segments (`base_vaddr`, `base_vaddr + n_pages * PAGE_SIZE`). This is used in the swap out operation because the requested address comes from the coremap and so it is page aligned. The problem arises because the actual boundaries of any segment may not be page aligned.
 
 ## page table
 
@@ -311,7 +311,7 @@ Finally, the `swap_shutdown()` is invoked at memory manager shutdown (`vm_shutdo
 
 But which page is going to be the victim of the swap out?
 
-We adopted a simple **First-In-First-out** algorithm that evicts the first page that has been allocated by the coremap. In order to keep track of the history of the allocations we implemented a *FIFO queue* with a *linked list*. 
+We adopted a simple **First-In-First-out** algorithm that evicts the first page that has been allocated by the coremap. The coremap is shared among all processes, so it is a *global replacement* policy. In order to keep track of the history of the allocations we implemented a *FIFO queue* with a *linked list*. 
 
 As an optimization we embedded the nodes of the linked list in the `coremap_entry` structure. To be precise, each `coremap_entry` has two 64-bit values (`prev_allocated` and `next_allocated`) that contain the `coremap` indexes of the `coremap_entry`s corresponding to the previous and to the next nodes in the linked list. See the [coremap](#coremap) section for more details on its other functionalities.
 
@@ -320,7 +320,7 @@ So when a page is allocated, we now have to perform 2 operations:
 1. update the relative coremap array with the new address space information
 2. add the new page to the tail of the FIFO queue (*push* FIFO operation)
 
-Since each node is a `coremap_entry`, there is information about the virtual and physical address of the corresponding page promptly available.
+Since each node is a `coremap_entry`, there is information about the virtual and physical address of the corresponding page promptly available. 
 
 This is quite useful because it allows us to select a victim page easily by extracting the head of the linked list, but also it provides all the information needed to inform the victim process about the **swap-out** operation.
 
@@ -543,21 +543,23 @@ In order to compute the stats on page faults and the swap we created an array of
 /* kern/include/vmstats.h */
 
 #define VMSTAT_TLB_FAULT              0     // Total TLB fault
-#define VMSTAT_TLB_FAULT_FREE         1     // Faults whithout replacement in the TLB
-#define VMSTAT_TLB_FAULT_REPLACE      2     // Faults whithout replacement in the TLB
+#define VMSTAT_TLB_FAULT_FREE         1     // Faults whithout replacement in
+                                            // the TLB
+#define VMSTAT_TLB_FAULT_REPLACE      2     // Faults whithout replacement in
+                                            // the TLB
 #define VMSTAT_TLB_INVALIDATE         3     // TLB invalidations
-#define VMSTAT_TLB_RELOAD             4     // TLB misses for pages that were already 
-                                            // in memory
-#define VMSTAT_PAGE_FAULT_ZERO        5     // TLB misses that required a new page to 
-                                            // be zero-filled
-#define VMSTAT_PAGE_FAULT_DISK        6     // TLB misses that required a page to be 
-                                            // loaded from disk
-#define VMSTAT_ELF_FILE_READ          7     // Page faults that require getting a page
-                                            // from the ELF file
-#define VMSTAT_SWAP_FILE_READ         8     // Page faults that require getting a page
-                                            // from the swap file
-#define VMSTAT_SWAP_FILE_WRITE        9     // Page faults that require writing a page 
-                                            // to the swap file
+#define VMSTAT_TLB_RELOAD             4     // TLB misses for pages that were 
+                                            // already in memory
+#define VMSTAT_PAGE_FAULT_ZERO        5     // TLB misses that required a new 
+                                            // page to be zero-filled
+#define VMSTAT_PAGE_FAULT_DISK        6     // TLB misses that required a page 
+                                            // to be loaded from disk
+#define VMSTAT_ELF_FILE_READ          7     // Page faults that require getting 
+                                            // a page from the ELF file
+#define VMSTAT_SWAP_FILE_READ         8     // Page faults that require getting 
+                                            // a page from the swap file
+#define VMSTAT_SWAP_FILE_WRITE        9     // Page faults that require writing 
+                                            // a page to the swap file
 ```
 
 To access the stats and modify the array we put a spinlock (`stats_lock`) to ensure the atomicity of the operation. When the stats are showed by `vmstats_print()` during the `shutdown()` procedure, the atomicity is guaranteed by the fact that no other process is running. In this function, also the following checks are fulfilled:
@@ -626,7 +628,7 @@ Before each feature implementation there was a brain-storming session in which w
 
 We also adopted a unified `Makefile` to ensure that the compiling and debugging configurations matched. The makefile is available in the root of the repository.
 
-For the debug phase, each time a problem arose there were first a static analysis on the code to try to understand errors and then a dynamic analysis of the code using the degugger (the GUI version of GDB -> DDD).
+For the debug phase, each time a problem arose there were first a static analysis on the code to try to understand errors and then a dynamic analysis of the code using the degugger (DDD).
 
 The code has been shared using a GitHub repository.
 
@@ -637,3 +639,5 @@ Working on this project allowed us to understand more thoroughly the topics expl
 # Improvements
 
 A possible improvement for our project could be adding multi-processor support for the virtual memory manager, even though some parts are already thread-safe.
+
+Another idea would be to implement different and more efficient page replacement strategies.
