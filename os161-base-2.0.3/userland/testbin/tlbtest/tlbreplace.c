@@ -40,8 +40,7 @@
 
 #define NUM_TLB 64
 #define PAGE_SIZE 4096
-#define INCREMENT 1
-#define BYTES_FOR_TLB_REPLACE ((NUM_TLB + INCREMENT) * PAGE_SIZE)
+#define BYTES_FOR_TLB_REPLACE (NUM_TLB * PAGE_SIZE)
 
 char megaarray[BYTES_FOR_TLB_REPLACE];
 
@@ -49,7 +48,7 @@ int
 main(void)
 {
 	int i;
-	for (i=0; i<NUM_TLB+INCREMENT; i++) {
+	for (i=0; i<NUM_TLB; i++) {
 		megaarray[i*PAGE_SIZE] = 'A';
 	}
 	return 0;
