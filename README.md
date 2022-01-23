@@ -4,17 +4,22 @@ author: Francesco Capano (s284739), Cosma Alex Vergari (s284922)
 date: Ciccio
 ---
 
-Strategia: Partire da come abbiamo implementato le singole classi, parlare dell'integrazione quando descriveremo suchvm.c, aggiornare i flow in alto aggiungendo informazioni che ci siamo ricordati descrivendo le classi.
-
-
 # Theorical introduction
 
 This is an implementation of the project 1 by G. Cabodi. It implements *demand paging, swapping* and provides *statistics* on the performance of the virtual memory manager. It completely replaces DUMBVM.
 
 ## On-demand paging
-The memory is divided in pages (hence paging) and frames. Pages are indexed by a virtual address and each of them has a physical frame assigned.
+The memory is divided in pages (hence paging) and frames. They lie in separate address spaces and for this reason they are indexed with different addresses :
+- **virtual addresses**  for pages 
+- **physical addresses**  for frames
 
-The on-demand paging technique creates this correspondence page by page and when a page is needed by a process. This event is triggered by the TLB.
+A page is the atomic unit managed by the virtual memory manager, on the other hand a frame is the smallest unit of physical memory. Whenever a page is **needed** by a process ( a logical address corresponding to that page has been accessed ), a correspondence between these two units is instantiated by the virtual memory manager.
+
+This event is triggered by the TLB and uses information about the current state of the memory and structures like page tables and swapfiles to accomplish the address translation.
+
+The whole concept of **on-demand paging** allows to avoid un-necessary I\O operations and a more efficient usage of memory. In this frame of reference, we implemented a ***lazy swapper***.
+
+Our virtual memory manager is called *SuchVM*.
 
 # os161 process implementation
 
@@ -511,40 +516,43 @@ The specified counter is incremented via the function `vmstats_inc` to which the
 Qua descriviamo i problemi che abbiamo risolto
 
 # Tests
-Che cosa fanno i test e che passano.
-- stava un test modificato quale ???
-- serve un test ceh dia kernel panic perchè lo swapfile è pieno
+We ran different tests in order to check the correctness of the virtual memory manager, both in basic and stress cases. We also tried to isolate the components of the manager that we were testing such as faulting and swapping. 
+
+These are the tests in testbin that we ran :
+- palin 
+- sort
+- zero (apart from sbrk test)
+- faulter
 - ctest
 - huge
 - matmult
-- tictac
-- sort
-- palin
-- faulter
-- zero
+- faulter modified (faulterro)
 
-kernel tests da mettere ? :
+We also modified the size of the swap file and ran `matmult` to check if a _kernel panic_ is raised because the size of the logical address space is greater than the sum of the physical memory and swap file sizes.
+
+
+To further test our tracking of the physical memory we ran the following kernel tests:
 - at
 - at2
 - bt
-- tlt
 - km1
 - km2
 
-TODO run the test and put the numbers
+
 Below is report a table with the statistics for each test
 
 ||TLB Faults|TLB Faults with Free|TLB Faults with Replace|TLB Invalidations|TLB Reloads|Page Faults (zero filled)|Page Faults (disk)|ELF File Read|Swapfile Read|Swapfile Writes|
-|  :-:  | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-|ctest  |     |     |     |     |     |     |     |     |     |     |
-|huge   |     |     |     |     |     |     |     |     |     |     |
-|matmult|     |     |     |     |     |     |     |     |     |     |
-|tictac |     |     |     |     |     |     |     |     |     |     |
-|sort   |     |     |     |     |     |     |     |     |     |     |
-|palin  |     |     |     |     |     |     |     |     |     |     |
-|faulter|     |     |     |     |     |     |     |     |     |     |
-|zero   |     |     |     |     |     |     |     |     |     |     |
-|testmod|     |     |     |     |     |     |     |     |     |     |
+|      :-:      | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+|palin          |13963 |13963  |0     |7824     | 13958    |1   | 4  | 4  |0   |  0 |
+|sort           |7052  |7052|0|3144|5316|289|1447|4|1443|1661|
+|huge           |7459  |7459|0|6752|3880|512|3067|3|3064|3506|
+|matmult        |4300  |4300|0|1204|3492|380|428|3|425|733|
+|ctest          |248591|248591|0|249633|123627|257|124707|3|124704|124889|
+|zero           |143   |143|0|139|137|3|3|3|0|0|
+
+The _faulter_ test tries to access an address that may be outside of the process address space boundaries. The _faulterro_ test attempts to write to a _read-only_ memory region within its boundaries. Both return segmentation fault and the process is killed, however the kernel does not panic.
+
+In the _swapfile kernel panic_ test the kernel panic is succesfully raised. 
 
 
 # Workload division
