@@ -9,7 +9,7 @@ Strategia: Partire da come abbiamo implementato le singole classi, parlare dell'
 
 # Theorical introduction
 
-This is an implementation of the project 1 by G. Cabodi. It implements demand paging, swapping and provides statistics on the performance of the virtual memory manager. It completely replaces DUMBVM.
+This is an implementation of the project 1 by G. Cabodi. It implements *demand paging, swapping* and provides *statistics* on the performance of the virtual memory manager. It completely replaces DUMBVM.
 
 ## On-demand paging
 The memory is divided in pages (hence paging) and frames. Pages are indexed by a virtual address and each of them has a physical frame assigned.
@@ -19,20 +19,20 @@ The on-demand paging technique creates this correspondence page by page and when
 # os161 process implementation
 
 ### Running a user program 
-The normal flow of operation of os161 starting a user program is started from the menu where is activated the subsequent chain of calls :
+The normal flow of operation of os161 starting a user program begins from the menu where the following chain of calls is performed:
 * `cmd_prog` 
 * `common_prog` 
 * `proc_create_program` ( create user process ) 
 * `thread_fork` 
 * `cmd_progthread` 
-* `runprogramm` 
+* `runprogram` 
 * `loadelf` 
 * `enter_new_process`
 
-The part analized and modified are the ones regarding `runprogram`,`loadelf` and the TLB invalidation process in the context swith. The latter is performed in `as_destroy`
+The parts analized and modified are the ones regarding `runprogram`,`loadelf` and the TLB invalidation process in the context switch. The latter is performed in `as_activate`.
 
 ### runprogram
-In `runprogram` the program file is opened using `vfs_open`, and then a new address space is created and activated ( using `as_create` and `as_activate`). The file is loaded in memory using the `load_elf` function and at the end the user stack is defined through `as_define_stack`and the new process is entered ( `enter_new_process` ). The major fix to this function is that to allow the on demand paging the program file has to be opened during the whole execution of the program and so there is no call no `vfs_close` that will be executed only when the program terminates its execution ( in `as_destroy`).
+In `runprogram` the program file is opened using `vfs_open`, and then a new address space is created and activated ( using `as_create` and `as_activate`). The process segments are defined by the `load_elf` function and the user stack is defined through `as_define_stack`, then the new process is started ( `enter_new_process` ). The major change to this function has been leaving the ELF program file open during the whole execution of the program. So there is no call to `vfs_close`, which instead will be executed only when the program terminates its execution (in `as_destroy`).
 
 ### loadelf
 The `load_elf` function was used to load the entire file in the memory, but following the policy of the on demand paging there is no need to do that. Our solution does not use the function `load_segment` in the loadelf.c file to load the segments in memory but simply reads the executable header and define the regions of the address space using `as_define_region` and prepare it through `as_prepare_load`. The function returns the entrypoint that will be used to start the process.
@@ -50,7 +50,6 @@ In the `vm_fault` function the flow is the following :
 
 
 # Implementation
-<!-- Qua parliamo di come abbiamo realizzato le funzionalità principali -->
 ## coremap
 The whole memory can be represented as a collection of pages that are in different states. A page can be:
 - *untracked*: if the memory manager has not the control over that page yet
@@ -476,16 +475,6 @@ In doing so when the swapped page is requested back, it is possible to retrieve 
 Other basic functions performed at page level by the page table are add and entry ( function `void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)`)to the table and get an entry ( `void pt_add_entry(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)`), using the trivial conversion described before. We also implemented the function `void pt_swap_in(struct pagetable *pt, vaddr_t vaddr, paddr_t paddr)` that is a wraper for the `pt_add_entry` function, when the page to be added to the page table is a swapped page.
 
 There are some other functions needed to manage the page table structure: `pt_copy` to copy the entire struct, `pt_destroy` to destroy the struct and `pt_free` to free all the page saved in memory, in case there is a swapped entry, `swap_free` is called to invalidate the entry in the swapfile.
-
-
-## List of files created/modified
-- addrspace.c  Francesco
-- pt.c Francesco
-- vmstats.c Francesco
-- coremap.c "Cosma"
-- segments.c Cosma
-- swapfile.c Cosma
-- suchvm.c (delayed)
 
 
 ## Statistics
