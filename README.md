@@ -17,47 +17,47 @@ The memory is divided in pages (hence paging) and frames. They lie in separate a
 - **virtual addresses** for pages
 - **physical addresses** for frames
 
-A page is the atomic unit managed by the virtual memory manager, on the other hand a frame is the smallest unit of physical memory. Whenever a page is **needed** by a process ( a logical address corresponding to that page has been accessed ), a correspondence between these two units is instantiated by the virtual memory manager.
+A page is the atomic unit managed by the virtual memory manager, on the other hand a frame is the smallest unit of physical memory. Whenever a page is **needed** by a process (a logical address corresponding to that page has been accessed), a correspondence between these two units is instantiated by the virtual memory manager.
 
 This event is triggered by the TLB and uses information about the current state of the memory and structures like page tables and swapfiles to accomplish the address translation.
 
-The whole concept of **on-demand paging** allows to avoid un-necessary I\O operations and a more efficient usage of memory. In this frame of reference, we implemented a **_lazy swapper_**.
+The whole concept of **on-demand paging** allows to avoid un-necessary I/O operations and a more efficient usage of memory. In this frame of reference, we implemented a **_lazy swapper_**.
 
 Our virtual memory manager is called _SuchVM_.
 
 # os161 process implementation
 
-### Running a user program
+## Running a user program
 
 The normal flow of operation of os161 starting a user program begins from the menu where the following chain of calls is performed:
 
-- `cmd_prog`
-- `common_prog`
-- `proc_create_program` ( create user process )
-- `thread_fork`
-- `cmd_progthread`
-- `runprogram`
-- `loadelf`
-- `enter_new_process`
+- `cmd_prog()`
+- `common_prog()`
+- `proc_create_program()` (create user process)
+- `thread_fork()`
+- `cmd_progthread()`
+- `runprogram()`
+- `loadelf()`
+- `enter_new_process()`
 
-The parts analized and modified are the ones regarding `runprogram`,`loadelf` and the TLB invalidation process in the context switch. The latter is performed in `as_activate` (see [addrspace](#addrspace) section).
+The parts analized and modified are the ones regarding `runprogram()`, `loadelf()` and the TLB invalidation process in the context switch. The latter is performed in `as_activate()` (see [addrspace](#addrspace) section).
 
-### runprogram
+## runprogram
 
-In the `runprogram` function, the program file is opened using `vfs_open`, and then a new address space is created and activated ( using `as_create` and `as_activate`) (see [addrspace](#addrspace) section). The process segments are defined in the `load_elf` function and the user stack is defined through `as_define_stack`, then the new process is started ( `enter_new_process` ).
+In the `runprogram()` function, the program file is opened using `vfs_open()`, and then a new address space is created and activated (using `as_create()` and `as_activate()` described in the [addrspace](#addrspace) section). The process segments are defined in the `load_elf()` function and the user stack is defined through `as_define_stack()`, then the new process is started (`enter_new_process()`).
 
-The major change to `runprogram()` has been leaving the ELF program file open during the whole execution of the program. So there is no call to `vfs_close`, which instead will be executed only when the program terminates its execution (in `as_destroy`).
+The major change to `runprogram()` has been leaving the ELF program file open during the whole execution of the program. So there is no call to `vfs_close()`, which instead will be executed only when the program terminates its execution (in `as_destroy()`).
 
-### loadelf
+## loadelf
 
 The `load_elf()` function was previously used to load the entire file in the memory; but following the policy of the on demand paging there is no need to do that.
 
 Our solution does not use the function `load_segment()` from `loadelf.c` file to load the segments from disk but simply reads the executable header and defines the regions of the address space using `as_define_region()` and prepares them through `as_prepare_load()` (see [addrspace](#addrspace) and [segments](#segments) sections). Everything is performed in the `load_elf()` function that returns the entrypoint that will be used to start the process.
 
-### Flow of page loading from TLB fault
+## Flow of page loading from TLB fault
 
 The TLB miss event is managed by `vm_fault()` (defined in [suchvm.c](#suchvm)). Every time `vm_fault()` is called, a new virtual to physical address correspondence is saved in the TLB using a round robin algorithm to eventually select the victim.
-In all cases, the coremap intervenes by allocating a page for the user process via the `alloc_upage()` function (see [coremap](#coremap) section).
+In all cases, the *coremap* intervenes by allocating a page for the user process via the `alloc_upage()` function (see [coremap](#coremap) section).
 
 In the `vm_fault` function the flow is the following :
 
@@ -77,7 +77,7 @@ The whole memory can be represented as a collection of pages that are in differe
 - _occupied_: if the memory manager is aware of the page and it has been allocated for a user or kernel process
 - _free_: if the memory manager is aware of the page but nobody is using it
 
-os161 by default has a function in `ram.c` called `ram_stealmem()` that returns the physical address of a frame that has never been used before. This form of tracking is not enough for our purposes, so we created an array of structures `struct coremap_entry`, 1 entry for each existing page of memory.
+os161 by default has a function in `ram.c` called `ram_stealmem()` that returns the physical address of a frame that has never been used before. This form of tracking is not enough for our purposes, so we created an array of structures `struct coremap_entry` where *1 entry corresponds to 1 memory frame*.
 
 Each entry contains the following information:
 
@@ -109,6 +109,8 @@ But how do we obtain the physical address of the page? If we consider the beginn
 ```
 The other fields will be discussed further in the explanation (see [swapping](#swapfile)).
 
+TODO: linked list in swapfile
+
 There are 4 main functions inside the coremap module, that implement what we have discussed so far:
 
 - `alloc_kpages()/free_kpages()`: Respectively allocates a number of pages or frees a previously allocated range of pages in the coremap requested by the **kernel**
@@ -128,7 +130,7 @@ The code segment contains the actual machine code that will be executed by the p
 
 The data segment contains the data that is used by the program during its execution. For example the memory space allocated to variables is part of this segment. This segment must be **read-write** to allow variables to be read and written back.
 
-The stack segment is an empty memory space that is used by the process to perform several operations: allocate frames for a function call, variables space, and so on. This segment is empty at process creation time and it is used by the process during its execution.
+The stack segment is a memory space that is used by the process to perform several operations: allocate frames for a function call, variables space, and so on. This segment is empty at process creation time and it is used by the process during its execution.
 
 The code and data segment properties declarations are in the *executable ELF file headers*, also their initial content is in the ELF file and for this reason they must be loaded from disk at some point in the process execution. The stack segment properties are decided by the kernel implementation instead, and its initial content is all zeroes.
 
@@ -152,7 +154,7 @@ struct prog_segment
 
 Here is a brief description of each field:
 
-- `permissions` describes what operations can be performed on the segment (R/W/X, STACK) and can assume only one of the constant values declared in the header file, the logic should follow what has been said at the beginning of the chapter
+- `permissions` describes what operations can be performed on the pages of the segment (R/W/X, STACK) and it can assume only one of the constant values declared in the header file, the logic should follow what has been said at the beginning of the chapter
 - `file_size` contains the information of how long the segment is in the ELF file
 - `file_offset` contains the offset inside the file where the considered segment begins at
 - `base_vaddr` is the starting virtual address of the segment, so any access of the declaring process to a virtual address within `base_vaddr` and `base_vaddr + mem_size` will be inside this segment
@@ -173,13 +175,13 @@ The `seg_load_page()` is one of the most important functions in the whole memory
 
 - The page to be loaded is the first of the `n_pages`
 - The page to be loaded is the last of the `n_pages`
-- The page to be loaded is in the middle of the virtual address range *(0 < page_index < n_pages-1)*
+- The page to be loaded is in the middle of the virtual address range *(0 < page_index < n_pages)*
 
 These cases can be distinguished by checking where `vaddr` falls in the segment declared virtual address range. Depending on the case, the kernel makes a calculation on the 3 parameters required for the following *read* operation that are:
 
 - the destination physical address adjusted for internal offset
-- the offset in file to read at 
-- the length of the data to read from file
+- the offset in file to read from
+- the length of the data to read 
 
 To have a more detailed explanation on how these parameters are calculated, have a look at the implementation of the function in the `kern/vm/segments.c` file.
 
@@ -206,7 +208,7 @@ struct addrspace {
 In order to manage the address space we created functions to create (`as_create()`) and allocate the structure, to copy (`as_copy()`) and destroy (`as_destroy()`) the address space. In particular it is worth to mention the `as_destroy()` function because the data structure is destroyed only when the program has terminated, and so there is the need to close the program file with `vfs_close()` (that we remind it was left open to load pages  whenever needed).
 
 Strictly correlated are: the function `as_prepare_load()` that prepares the declared segments to the load (calls `seg_prepare()`) and the function `as_define_region()`, since they are involved in the segment initialization and set up. In particular the latter computes the number of pages needed for the region and calls `seg_create()` and `seg_define()` for each segment. There is also the implementation of `as_define_stack()`, that is used for the stack region in an equivalent manner as for the others two regions (`seg_prepare()`,`seg_create()` and `seg_define()` in [segments](#segments)).
-``
+
 Since we need the the base address of the stack (the lowest address of stack segment) and the stack in os161 grows downwards from `0x80000000` (`USERSTACK` constant) the following computation is performed :
 
 ```C
@@ -217,13 +219,13 @@ Then the stack pointer is assigned the constant `USERSTACK`.
 
 Concerning the operational phases, the most important functions are the ones that **activate the address space** at each context switch and the one to **locate the proper segments** in which the system needs to executes the operations (such as writing or reading from the page table).
 
-The function `as_activate()` is used to activate the address space, and in particular it invalidates all the tlb entries. This is necessary since the TLB is shared among processes and its entries do not contain any reference to the running process. The function checks at the beginning if the current address space is `NULL`. This means that it has been called by a kernel thread and no tlb invalidation is performed.
+The function `as_activate()` is used to activate the address space, and in particular it invalidates all the TLB entries. This is necessary since the TLB is shared among processes and its entries do not contain any reference to the running process. The function checks at the beginning if the current address space is `NULL`. This means that it has been called by a kernel thread and no tlb invalidation is performed.
 
 The function `as_find_segment()` is used to retrieve the proper segment inside the current address space where the required address is located. It checks that the virtual address passed is inside the boundaries of the current adress space. There are 2 versions of this function, the first called `as_find_segment()`, finds the segment by precisely checking if `vaddr` is between the start and the end address (defined as `base_vaddr + mem_size`) of one of the segments. 
 
 The second one is `as_find_segment_coarse()` which finds the segment by checking if `vaddr` is between the **page-aligned**  boundaries of one of the segments (`base_vaddr` - `base_vaddr + n_pages * PAGE_SIZE`). This is used in the swap out operation because the requested address comes from the coremap and so it is page aligned. The problem arises because the actual boundaries of any segment may not be page aligned.
 
-## Page table
+## page table
 
 In order to support the paging operations a proper data structure that allows to have a correspondance between the virtual and the physcial addresses is needed. Our choice is showed below.
 
@@ -262,7 +264,7 @@ Here are the two constants used in this context:
     #define PT_SWAPPED_MASK 0x00000001
 ```
 
-In doing so when the swapped page is requested back, it is possible to retrieve directly the offset of the swapfile ( function `pt_get_swap_offset()` ) and reload that page in memory. To retrieve the offset and to check if a page has been swapped out we use the mask `PT_SWAPPED_MASK` in the following way :
+In doing so when the swapped page is requested back, it is possible to retrieve directly the offset of the swapfile (function `pt_get_swap_offset()`) and reload that page in memory. To retrieve the offset and to check if a page has been swapped out we use the mask `PT_SWAPPED_MASK` in the following way :
 
 ```C
     /*Page has been swapped out if the following condition is true :*/
@@ -305,7 +307,7 @@ Every operation on the `swapmap` is performed under the ownership of a lock (`st
 
 Finally, the `swap_shutdown()` is invoked at memory manager shutdown (`vm_shutdown()`) and it frees the used resources: close the swapfile handle and free the space used by the `swapmap`.
 
-# suchvm
+## suchvm
 
 This is the class where most of the pieces come together, it contains:
 
@@ -313,7 +315,7 @@ This is the class where most of the pieces come together, it contains:
 2. the **high-level management of a page fault**
 3. the implementation of the round-robin **TLB replacement algorithm**
 
-## VM initialization
+### VM initialization
 
 Let's start with point *(1)*. There are 2 functions that are involved: `vm_bootstrap()` and `vm_shutdown()`.
 
@@ -321,7 +323,7 @@ Let's start with point *(1)*. There are 2 functions that are involved: `vm_boots
 
 On the other hand, `vm_shutdown()` is the VM shutdown function and it is the specular of the bootstrap, containing the functions deallocating the resources used by the VM. This function is called by the `shutdown()` function defined in *kern/main/main.c*, that gets executed when the machine is powering off.
 
-## Management of a page fault
+### Management of a page fault
 
 It is implemented in the function `vm_fault()`. This function is directly called by the interrupt handler `mips_trap()` whenever the code of the interrupt assumes one of the following values (defined in *arch/mips/include/trapframe.h*):
 
@@ -548,9 +550,6 @@ ELF File reads + Swapfile reads == Page Faults (Disk)
 The function `vmstats_init()` is used to initialize the array of counters and to activate the stats tracking `stats_active = 1`. The spinlock `stats_lock`is initialized statically.
 
 The specified counter is incremented via the function `vmstats_inc()` to which the proper array index is passed as parameter.
-
-# Addressed problems
-TODO: Qua descriviamo i problemi che abbiamo risolto
 
 # Tests
 

@@ -24,6 +24,8 @@ struct pagetable {
     paddr_t *pages;
 };
 
+/* See pt.c for a general description on the following functions */
+
 struct pagetable *pt_create(unsigned long size, vaddr_t start_address);
 int pt_copy(struct pagetable *old, struct pagetable **ret);
 paddr_t pt_get_entry(struct pagetable *pt, vaddr_t vaddr);

@@ -18,6 +18,11 @@ static void zero_a_region(paddr_t paddr, size_t n)
     bzero((void *)PADDR_TO_KVADDR(paddr), n);
 }
 
+/*
+ * General descriptions of the following functions
+ * are available in segments.c
+ */
+
 struct prog_segment *seg_create(void)
 {
     struct prog_segment *seg = kmalloc(sizeof(struct prog_segment));
@@ -50,12 +55,18 @@ int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, of
     KASSERT(v != NULL);
     KASSERT(read || write || execute);
 
+    /* Assign to the struct fields */
     ps->base_vaddr = base_vaddr;
     ps->file_size = file_size;
     ps->file_offset = file_offset;
     ps->mem_size = mem_size;
     ps->n_pages = n_pages;
     ps->elf_vnode = v;
+
+    /*
+     * IMPORTANT: Determines the permissions that the pages
+     *            inside this segment have
+     */
     if (write)
     {
         ps->permissions = PAGE_RW;
@@ -67,11 +78,17 @@ int seg_define(struct prog_segment *ps, vaddr_t base_vaddr, size_t file_size, of
         else
             ps->permissions = PAGE_RONLY;
     }
+
+    /* Unused variable, read is always allowed */
     (void)read;
 
     return 0;
 }
 
+/*
+ * Very similar structure to seg_define() but with special
+ * values for the stack
+ */
 int seg_define_stack(struct prog_segment *ps, vaddr_t base_vaddr, size_t n_pages)
 {
     KASSERT(ps != NULL);
@@ -89,8 +106,17 @@ int seg_define_stack(struct prog_segment *ps, vaddr_t base_vaddr, size_t n_pages
     ps->mem_size = n_pages * PAGE_SIZE;
     ps->n_pages = n_pages;
     ps->elf_vnode = NULL;
+
+    /*
+    * Special permissions for stack, used also for distinguishing
+    * from code/data segments
+    */
     ps->permissions = PAGE_STACK;
 
+    /*
+     * Since seg_prepare() is not invoked for the stack segment
+     * the page table allocation happens here
+     */
     ps->pagetable = pt_create(n_pages, base_vaddr);
     if (ps->pagetable == NULL)
     {
@@ -104,6 +130,7 @@ int seg_prepare(struct prog_segment *ps)
     KASSERT(ps != NULL);
     KASSERT(ps->pagetable == NULL);
 
+    /* Allocate the kernel memory for the page table */
     ps->pagetable = pt_create(ps->n_pages, ps->base_vaddr);
     if (ps->pagetable == NULL)
     {
@@ -125,6 +152,7 @@ int seg_copy(struct prog_segment *old, struct prog_segment **ret)
         return ENOMEM;
     }
 
+    /* Perform the copy */
     if (old->pagetable != NULL)
     {
         if (!seg_define(newps, old->base_vaddr, old->file_size, old->file_offset, old->mem_size,
@@ -139,6 +167,10 @@ int seg_copy(struct prog_segment *old, struct prog_segment **ret)
     return 0;
 }
 
+/*
+ * This function loads the content of the faulting address from file
+ * to the assigned physical address <paddr>
+ */
 int seg_load_page(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
 {
     vaddr_t vbaseoffset, voffset;
@@ -333,6 +365,7 @@ void seg_add_pt_entry(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
     KASSERT(vaddr >= ps->base_vaddr);
     KASSERT(vaddr < (ps->base_vaddr) + ps->mem_size);
 
+    /* Add translation to page table */
     pt_add_entry(ps->pagetable, vaddr, paddr);
 }
 
@@ -356,12 +389,16 @@ void seg_swap_in(struct prog_segment *ps, vaddr_t vaddr, paddr_t paddr)
     KASSERT(vaddr >= ps->base_vaddr);
     KASSERT(vaddr < (ps->base_vaddr) + ps->mem_size);
 
+    /* Obtain swap file offset from page table entry */
     off_t swap_offset = pt_get_swap_offset(ps->pagetable, vaddr);
     /* Actual disk SWAP IN and update the page table */
     swap_in(paddr, swap_offset);
     pt_swap_in(ps->pagetable, vaddr, paddr);
 }
 
+/*
+ * Deallocate resources
+ */
 void seg_destroy(struct prog_segment *ps)
 {
     KASSERT(ps != NULL);

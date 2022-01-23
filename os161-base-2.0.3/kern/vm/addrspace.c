@@ -40,6 +40,11 @@
 #include <suchvm.h>
 #include <vmstats.h>
 
+/*
+ * For general behaviour description of the following
+ * functions, check addrspace.h
+ */
+
 struct addrspace *
 as_create(void)
 {
@@ -288,7 +293,8 @@ struct prog_segment *as_find_segment(struct addrspace *as, vaddr_t vaddr)
 
 	/* 
      * Check if the fault address is within the boundaries of
-     * the current address space
+     * the current address space and find the segment containing
+	 * that address
      */
 	vbase1 = as->seg1->base_vaddr;
 	vtop1 = vbase1 + as->seg1->mem_size;
@@ -296,6 +302,7 @@ struct prog_segment *as_find_segment(struct addrspace *as, vaddr_t vaddr)
 	vtop2 = vbase2 + as->seg2->mem_size;
 	stackbase = USERSTACK - SUCHVM_STACKPAGES * PAGE_SIZE;
 	stacktop = USERSTACK;
+
 	if (vaddr >= vbase1 && vaddr < vtop1)
 	{
 		ps = as->seg1;

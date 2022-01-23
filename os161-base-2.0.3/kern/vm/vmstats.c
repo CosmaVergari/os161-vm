@@ -75,6 +75,10 @@ void vmstats_print(void)
         kprintf("VMSTAT %25s = %10d\n", stats_names[i], stats_counts[i]);
     }
 
+    /*
+     * Summation done in order to perform consistency checks between counters
+     */
+
     tlb_faults = stats_counts[VMSTAT_TLB_FAULT];
     free_plus_replace = stats_counts[VMSTAT_TLB_FAULT_FREE] + stats_counts[VMSTAT_TLB_FAULT_REPLACE];
     disk_plus_zeroed_plus_reload = stats_counts[VMSTAT_PAGE_FAULT_DISK] + stats_counts[VMSTAT_PAGE_FAULT_ZERO] + stats_counts[VMSTAT_TLB_RELOAD];

@@ -21,6 +21,10 @@ static unsigned long const_invalid_reference = 0;
 static unsigned long victim = 0;
 static unsigned long last_alloc = 0;
 
+/*
+ * Checks if the coremap is active by checking
+ * the status of the shared variable coremapActive
+ */
 static int isCoremapActive()
 {
 	int active;
@@ -67,10 +71,12 @@ void coremap_init(void)
 }
 
 void coremap_shutdown(void) {
+	/* Deactivate coremap */
 	spinlock_acquire(&coremap_lock);
 	coremapActive = 0;
 	spinlock_release(&coremap_lock);
 	/*
+	 * Free the array
 	 * we can't acquire the lock because it is needed by
 	 * the kfree()
 	 */
@@ -79,7 +85,8 @@ void coremap_shutdown(void) {
 
 /* 
  *  Search in freeRamFrames if there is a slot npages long
- *  of *freed* frames that can be occupied.
+ *  of *freed* frames that can be occupied. If there is then
+ *  occupy it and return the base physical address
  */
 static paddr_t getfreeppages(unsigned long npages,
 							 unsigned char entry_type,
@@ -143,7 +150,7 @@ static paddr_t getfreeppages(unsigned long npages,
 }
 
 /*
- *  Only called by the kernel beacuse the user can alloc 1 page at time
+ *  Only called by the kernel because the user can alloc 1 page at time
  *	Get pages to occupy, first search in free pages otherwise
  *	call ram_stealmem()
  */
@@ -205,7 +212,7 @@ static int freeppages(paddr_t addr, unsigned long npages)
 	return 1;
 }
 
-/* Allocate/free some kernel-space virtual pages, also used in kmalloc() */
+/* Allocate some kernel-space pages, also used in kmalloc() */
 vaddr_t alloc_kpages(unsigned npages)
 {
 	paddr_t pa;
@@ -219,6 +226,12 @@ vaddr_t alloc_kpages(unsigned npages)
 	return PADDR_TO_KVADDR(pa); /* Convert back to kernel virtual address */
 }
 
+
+/*
+ * Free the range of memory pages that have been
+ * previously allocated to the kernel by alloc_kpages()
+ * Also used in kfree()
+ */
 void free_kpages(vaddr_t addr)
 {
 	if (isCoremapActive())
@@ -230,11 +243,12 @@ void free_kpages(vaddr_t addr)
 	}
 }
 
-/* Paging support */
+/* SuchVM paging support */
 
 /*
  *  Only called by the user to alloc 1 page 
  *	First search in free pages otherwise call ram_stealmem()
+ *  then update the history linked list arccordingly
  */
 static paddr_t getppage_user(vaddr_t associated_vaddr)
 {
@@ -354,6 +368,11 @@ static paddr_t getppage_user(vaddr_t associated_vaddr)
 	return addr;
 }
 
+/*
+ * Free a page that has been previously allocated by a user program
+ * and update the linked list indexes for the removal of a node
+ * distinguishing each case
+ */
 static void freeppage_user(paddr_t paddr)
 {
 	unsigned long last_new, victim_new;
@@ -414,6 +433,7 @@ static void freeppage_user(paddr_t paddr)
 
 		spinlock_release(&coremap_lock);
 
+		/* Actually free the memory */
 		freeppages(paddr, 1);
 
 		spinlock_acquire(&victim_lock);
@@ -423,6 +443,7 @@ static void freeppage_user(paddr_t paddr)
 	}
 }
 
+/* Wrapper for getppage_user */
 paddr_t alloc_upage(vaddr_t vaddr)
 {
 	paddr_t pa;
@@ -433,6 +454,7 @@ paddr_t alloc_upage(vaddr_t vaddr)
 	return pa;
 }
 
+/* Wrapper for freeppage_user */
 void free_upage(paddr_t paddr)
 {
 	freeppage_user(paddr);
